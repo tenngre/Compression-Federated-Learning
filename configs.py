@@ -8,14 +8,14 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 import models
-from utils import datasets
+# from utils import datasets
 
 default_workers = os.cpu_count()
 
 
 def optimizer(config, params):
-    o_type = config['optim']
-    kwargs = config['optim_kwargs']
+    o_type = config['optima']
+    kwargs = config['optima_kwargs']
 
     if o_type == 'sgd':
         o = SGD(params,

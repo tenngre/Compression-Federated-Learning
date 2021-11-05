@@ -11,6 +11,8 @@ from utils.utils import progress_bar
 import torch.nn as nn
 import numpy as np
 
+import configs
+
 train_acc, train_loss = [], []
 test_acc, test_loss = [], []
 train_time = []
@@ -27,13 +29,16 @@ class LocalUpdate(object):
         self.client = client
         self.device = device
 
-    def train(self, net, lr):
+    def train(self, config, net):
         net.train()
+
         # train and update
-        optimizer = torch.optim.SGD(net.parameters(),
-                                    lr=self.args.lr,
-                                    momentum=self.args.momentum,
-                                    weight_decay=self.args.weight_decay)
+        optimizer = configs.optimizer(config, net.parameters())
+
+        # optimizer = torch.optim.SGD(net.parameters(),
+        #                             lr=self.args.lr,
+        #                             momentum=self.args.momentum,
+        #                             weight_decay=self.args.weight_decay)
         #         optimizer = torch.optim.Adam(net.parameters(), lr=self.args.lr)
 
         epoch_loss = []
@@ -45,9 +50,7 @@ class LocalUpdate(object):
             batch_acc = 0
             correct = 0
             for batch_idx, (images, labels) in enumerate(self.ldr_train):
-                # print(images[0])
-                #                 if self.args.tnt_image:
-                #                     images = TNT.image_tnt(images)
+
                 images = images
                 labels = labels.type(torch.LongTensor)
                 net.zero_grad()
@@ -138,7 +141,24 @@ def test_img(idxs, epoch, net_g, datatest, args, best_acc, dict_users_test=None)
     return acc, test_loss, best_acc
 
 
+class Aggregator(object):
+    def __init__(self, config, args):
+        self.client_num = config['client_num']
+        self.model = config['Model'][args.model]
+
+    def inited_model(self):
+        return self.model
+
+    def init_model(self, model):
+        cli_model = {}
+        for i in range(self.client_num):
+            cli_model[str(i)] = copy.deepcopy(model)
+        return cli_model
+
+
 def main(config, args, client_net):
+    scheduler = configs.scheduler(config, optimizer)
+
     for epoch in range(args.epochs):
         start_time = time.time()
         client_upload = {}
@@ -154,12 +174,13 @@ def main(config, args, client_net):
 
         # training
         for idx in idxs_users:
-            local = LocalUpdate(args=args,
-                                dataset=config['trainset'],
-                                idxs=np.int_(config['client_traindata'][idx]),
-                                client=idx)
-            network, loss_local_train, acc_local_train = local.train(net=client_net[str(idx)].to(config['device']),
-                                                                     lr=config['current_lr'])
+            client = LocalUpdate(args=args,
+                                 dataset=config['trainset'],
+                                 idxs=np.int_(config['client_traindata'][idx]),
+                                 client=idx)
+
+            network, loss_local_train, acc_local_train = client.train(config,
+                                                                      net=client_net[str(idx)].to(config['device']))
             # Global TNT weights or Norm Weights
             if args.tntupload:
                 print('ternary update')

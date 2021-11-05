@@ -109,7 +109,34 @@ config = {
     'client_traindata': dict_users_train,
     'client_testdata': dict_users_test,
     'device': device,
-    'test': 0
+
+    'client_num': 10,
+
+    'optima': 'adam',
+    'optima_kwargs': {
+        'lr': args.lr,
+        'momentum': 0.9,
+        'weight_decay': 0.0005,
+        'nesterov': False,
+        'betas': (0.9, 0.999)
+    },
+    'scheduler': 'step',
+    'scheduler_kwargs': {
+        'step_size': int(args.epochs * 0.8),
+        'gamma': 0.1,
+        'milestones': '0.5,0.75'
+    },
+    'Model': {
+        'vgg_tnt': VGG_tnt,
+        'vgg_norm': VGG_norm,
+        'mobilev2_tnt': MobileNetV2_tnt,
+        'mobilev2_norm': MobileNetV2,
+        'res18_tnt': ResNet_TNT18,
+        'res18_norm': ResNet18,
+        'res50_tnt': ResNet_TNT50,
+        'res50_norm': ResNet50,
+        'alex_tnt': AlexNet_tnt,
+        'alex_norm': AlexNet}
 }
 
 
