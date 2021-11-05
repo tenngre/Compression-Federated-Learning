@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader
 import os
 
 from scripts import DatasetSplit, FedAvg, zero_rates, ternary_convert, current_learning_rate
+from ternay import TNTConv2d, KernelsCluster, TNTLinear
+from tnt_fl_train_noniid import dataset_test
 from utils.utils import progress_bar
 import torch.nn as nn
 import numpy as np
@@ -20,7 +22,7 @@ comp_rate = []
 update_zero_rate = []
 
 
-class LocalUpdate(object):
+class Client(object):
     def __init__(self, args, dataset=None, idxs=None, client=None, device=None):
         self.args = args
         self.loss_func = nn.CrossEntropyLoss()
@@ -28,29 +30,22 @@ class LocalUpdate(object):
         self.ldr_train = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
         self.client = client
         self.device = device
+        self.ternary_convert = args.tntupload
 
     def train(self, config, net):
         net.train()
-
-        # train and update
         optimizer = configs.optimizer(config, net.parameters())
-
-        # optimizer = torch.optim.SGD(net.parameters(),
-        #                             lr=self.args.lr,
-        #                             momentum=self.args.momentum,
-        #                             weight_decay=self.args.weight_decay)
-        #         optimizer = torch.optim.Adam(net.parameters(), lr=self.args.lr)
 
         epoch_loss = []
         epoch_acc = []
         total = 0
-        print('Client {} is training on GPU {}.'.format(self.client, self.device))
+        print(f'Client {self.client} is training on GPU {self.device}.')
+
         for i in range(self.args.local_ep):
             batch_loss = []
             batch_acc = 0
             correct = 0
             for batch_idx, (images, labels) in enumerate(self.ldr_train):
-
                 images = images
                 labels = labels.type(torch.LongTensor)
                 net.zero_grad()
@@ -74,7 +69,13 @@ class LocalUpdate(object):
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
             epoch_acc.append(batch_acc)
 
-        return net, sum(epoch_loss) / len(epoch_loss), epoch_acc[-1]
+        if self.args.tntupload:
+            w_tnt, local_error = ternary_convert(copy.deepcopy(net))  # transmit tnt error
+            return w_tnt, local_error, sum(epoch_loss) / len(epoch_loss), epoch_acc[-1]
+
+        else:
+
+            return net.state_dict(), sum(epoch_loss) / len(epoch_loss), epoch_acc[-1]
 
 
 def test_img(idxs, epoch, net_g, datatest, args, best_acc, dict_users_test=None):
@@ -144,20 +145,48 @@ def test_img(idxs, epoch, net_g, datatest, args, best_acc, dict_users_test=None)
 class Aggregator(object):
     def __init__(self, config, args):
         self.client_num = config['client_num']
-        self.model = config['Model'][args.model]
+        self.model = config['Model'][args.model](10).to(config['device'])
+        self.zero_rate = False
 
     def inited_model(self):
         return self.model
 
-    def init_model(self, model):
+    def client_model(self, model):
         cli_model = {}
         for i in range(self.client_num):
             cli_model[str(i)] = copy.deepcopy(model)
         return cli_model
 
+    def params_aggregate(self, parma_dict):
+        w = list(parma_dict.values())
+        w_avg = copy.deepcopy(w[0])
 
-def main(config, args, client_net):
-    scheduler = configs.scheduler(config, optimizer)
+        for k in w_avg.keys():
+            for i in range(1, len(w)):
+                w_avg[k] += w[i][k]
+            w_avg[k] = torch.div(w_avg[k], float(len(w)))
+
+        if self.zero_rate:
+            total_params = 0
+            zero_params = 0
+            for key in w_avg.keys():
+                zero_params += (w_avg[key].view(-1) == 0).sum().item()
+                total_params += len(w_avg[key].view(-1))
+
+            return w_avg, (zero_params / total_params)
+
+        else:
+            return w_avg
+
+
+def main(config, args):
+    aggregator = Aggregator(config, args)
+    print('==> Building model..')
+    inited_mode = aggregator.inited_model()
+    print(inited_mode)
+
+    print('Deliver model to clients')
+    client_net = aggregator.client_model(inited_mode)
 
     for epoch in range(args.epochs):
         start_time = time.time()
@@ -168,30 +197,36 @@ def main(config, args, client_net):
         acc_locals_test = {}
         local_zero_rates = []
 
-        print(f'c\n | Global Training Round: {epoch} Training {args.his}|\n')
+        print(f'\n | Global Training Round: {epoch} Training {args.his}|\n')
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
 
         # training
         for idx in idxs_users:
-            client = LocalUpdate(args=args,
-                                 dataset=config['trainset'],
-                                 idxs=np.int_(config['client_traindata'][idx]),
-                                 client=idx)
+            client = Client(args=args,
+                            dataset=config['trainset'],
+                            idxs=np.int_(config['client_traindata'][idx]),
+                            client=idx)
 
-            network, loss_local_train, acc_local_train = client.train(config,
-                                                                      net=client_net[str(idx)].to(config['device']))
-            # Global TNT weights or Norm Weights
             if args.tntupload:
-                print('ternary update')
-                w_tnt, local_error = ternary_convert(copy.deepcopy(client_net[str(idx)]))  # transmit tnt error
+                w_tnt, local_error, loss_local_train, acc_local_train = client.train(config,
+                                                                                     net=client_net[str(idx)].to(
+                                                                                         config['device']))
                 client_local[str(idx)] = copy.deepcopy(local_error)
                 client_upload[str(idx)] = copy.deepcopy(w_tnt)
                 z_r = zero_rates(w_tnt)
                 local_zero_rates.append(z_r)
                 print('Client {} zero rate {:.2%}'.format(idx, z_r))
+
             else:
-                client_upload[str(idx)] = copy.deepcopy(client_net[str(idx)].state_dict())
+                w_, loss_local_train, acc_local_train = client.train(config,
+                                                                     net=client_net[str(idx)].to(
+                                                                                         config['device']))
+                client_upload[str(idx)] = copy.deepcopy(w_)
+
+            # recording local training info
+            acc_locals_train[str(idx)] = copy.deepcopy(acc_local_train)
+            loss_locals_train.append(copy.deepcopy(loss_local_train))
 
             # recording local training info
             acc_locals_train[str(idx)] = copy.deepcopy(acc_local_train)
@@ -200,10 +235,10 @@ def main(config, args, client_net):
         train_time.append(elapsed)
 
         # aggregation in server
-        glob_avg, cr = FedAvg(copy.deepcopy(client_upload), copy.deepcopy(acc_locals_train), 1)
+        glob_avg = aggregator.params_aggregate(copy.deepcopy(client_upload))
 
-        print('Global Zero Rates {:.2%}'.format(cr))
-        comp_rate.append(cr)
+        # print('Global Zero Rates {:.2%}'.format(cr))
+        # comp_rate.append(cr)
 
         # update local models
         if args.tntupload:
