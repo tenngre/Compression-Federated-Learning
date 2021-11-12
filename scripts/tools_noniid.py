@@ -215,8 +215,4 @@ def WeightsUpdate(global_new, global_old, omiga):
     # return global_old
 
 
-def Client_net(net, num_users):
-    cli_net = {}
-    for i in range(num_users):
-        cli_net[str(i)] = copy.deepcopy(net)
-    return cli_net
+

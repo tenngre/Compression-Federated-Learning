@@ -9,7 +9,6 @@ import random
 import numpy as np
 from scripts import training
 
-
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
 parser.add_argument('--his', type=str, required=True)
@@ -25,7 +24,7 @@ parser.add_argument('--local_ep', default=1, type=int)
 parser.add_argument('--bs', default=128, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
-parser.add_argument('--tntupload', action='store_true', help='uploading tnt weights')
+parser.add_argument('--tnt_upload', action='store_true', help='uploading tnt weights')
 parser.add_argument('--weight_decay', default=0.0001, type=float)
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
@@ -123,10 +122,8 @@ config = {
         'alex_norm': AlexNet}
 }
 
-
-# def acc_rate(train_acc):
-#     return abs((train_acc[-1] - train_acc[-2]) / (train_acc[-2] - train_acc[-3]))
-
-
 if __name__ == '__main__':
-    training.main(config, args)
+    if args.tnt_upload:
+        training.main_tnt_upload(config, args)
+    else:
+        training.main_norm_upload(config, args)
