@@ -35,6 +35,7 @@ parser.add_argument('--g_c', default=200, type=int, help='floating model communi
 args = parser.parse_args()
 
 args_dict = vars(args)
+
 os.makedirs('./setting', exist_ok=True)
 with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
     json.dump(args_dict, f)
@@ -119,11 +120,16 @@ config = {
         'res50_tnt': ResNet_TNT50,
         'res50_norm': ResNet50,
         'alex_tnt': AlexNet_tnt,
-        'alex_norm': AlexNet}
+        'alex_norm': AlexNet},
+
+    'log_dir': 'results'
 }
 
 if __name__ == '__main__':
+
     if args.tnt_upload:
+        print("YES")
         training.main_tnt_upload(config, args)
     else:
+        print("NOOOOOOOOO")
         training.main_norm_upload(config, args)
