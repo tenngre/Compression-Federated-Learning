@@ -2,11 +2,13 @@ import torch
 import torch.nn as nn
 from ternay.convert_tnt import *
 import copy
+from models import register_network
 
 
+@register_network('vgg_tnt')
 class VGG_tnt(nn.Module):
 
-    def __init__(self, n_classes=100):
+    def __init__(self, nclass=100):
         super(VGG_tnt, self).__init__()
         
         self.feature_extractor = nn.Sequential(
@@ -32,7 +34,7 @@ class VGG_tnt(nn.Module):
         self.classifier = nn.Sequential(
             TNTLinear(in_features=6400, out_features=1024),
             nn.ReLU(),
-            TNTLinear(in_features=1024, out_features=n_classes),
+            TNTLinear(in_features=1024, out_features=nclass),
         )
         
     def get_tnt(self):

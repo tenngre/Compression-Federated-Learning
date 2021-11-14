@@ -30,7 +30,6 @@ parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
 parser.add_argument('--model', default='res18_norm', type=str)
 parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
-# parser.add_argument('--num_samples', default=200, type=int)
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
 args = parser.parse_args()
 
@@ -40,7 +39,7 @@ os.makedirs('./setting', exist_ok=True)
 with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
     json.dump(args_dict, f)
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 # torch.cuda.set_device(device)
 
@@ -58,14 +57,18 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-dataset_train = torchvision.datasets.CIFAR10(root='/data/datasets/cifar10',
+dataset_train = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
                                              train=True, download=True,
                                              transform=transform_train)
 
-dataset_test = torchvision.datasets.CIFAR10(root='/data/datasets/cifar10',
+dataset_test = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
                                             train=False, download=True,
                                             transform=transform_test)
 
+dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
+                                                      dataset_test,
+                                                      args.num_users,
+                                                      args.n_class)
 
 def random_seed(seed):
     random.seed(seed)
@@ -73,27 +76,31 @@ def random_seed(seed):
     np.random.seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-
 random_seed(80)
-
-# train_dataset, test_dataset, num_users, n_class, num_samples, rate_unbalance
-dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
-                                                      dataset_test,
-                                                      args.num_users,
-                                                      args.n_class)
 
 config = {
     # 'current_lr': args.lr,
     'acc_rate': 0.5,
     'best_acc': 0,
     'glob_agg_num': 0,
-    'trainset': dataset_train,
-    'testset': dataset_test,
-    'client_traindata': dict_users_train,
-    'client_testdata': dict_users_test,
     'device': device,
 
-    'client_num': 10,
+    # FL global items
+    'epochs': args.epochs,
+    'bs': args.bs,
+    'train_set': dataset_train,
+    'test_set': dataset_test,
+    'current_lr': args.lr,
+
+    # FL client
+    'client_train_data': dict_users_train,
+    'client_test_data': dict_users_test,
+    'client_num': args.num_users,
+    'client_frac': args.frac,
+    'tnt_upload': args.tnt_upload,
+    'local_bs': args.local_bs,
+    'local_ep': args.local_ep,
+    'd_epoch': args.d_epoch,
 
     'optima': 'adam',
     'optima_kwargs': {
@@ -109,27 +116,33 @@ config = {
         'gamma': 0.1,
         'milestones': '0.5,0.75'
     },
+    'model_name': args.model,
+    'arch_kwargs': {
+        'nclass': 10,  # will be updated below
+        # 'pretrained': True,
+        # 'freeze_weight': False,
+    },
 
-    'Model': {
-        'vgg_tnt': VGG_tnt,
-        'vgg_norm': VGG_norm,
-        'mobilev2_tnt': MobileNetV2_tnt,
-        'mobilev2_norm': MobileNetV2,
-        'res18_tnt': ResNet_TNT18,
-        'res18_norm': ResNet18,
-        'res50_tnt': ResNet_TNT50,
-        'res50_norm': ResNet50,
-        'alex_tnt': AlexNet_tnt,
-        'alex_norm': AlexNet},
+    # 'Model': {
+    #     'vgg_tnt': VGG_tnt,
+    #     'vgg_norm': VGG_norm,
+    #     'mobilev2_tnt': MobileNetV2_tnt,
+    #     'mobilev2_norm': MobileNetV2,
+    #     'res18_tnt': ResNet_TNT18,
+    #     'res18_norm': ResNet18,
+    #     'res50_tnt': ResNet_TNT50,
+    #     'res50_norm': ResNet50,
+    #     'alex_tnt': AlexNet_tnt,
+    #     'alex_norm': AlexNet},
 
-    'log_dir': 'results'
+    'log_dir': 'results',
+    'history': args.his,
+    'save': args.save
 }
 
 if __name__ == '__main__':
 
     if args.tnt_upload:
-        print("YES")
-        training.main_tnt_upload(config, args)
+        training.main_tnt_upload(config)
     else:
-        print("NOOOOOOOOO")
         training.main_norm_upload(config, args)

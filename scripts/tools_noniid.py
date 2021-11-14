@@ -100,8 +100,8 @@ class DatasetSplit(Dataset):
         return image, np.int_(label)
 
 
-def current_learning_rate(epoch, current_lr, args):
-    if (epoch + 1) % args.d_epoch == 0:
+def current_learning_rate(epoch, current_lr, config):
+    if (epoch + 1) % config['d_epoch'] == 0:
         return current_lr * 0.1
     else:
         return current_lr
