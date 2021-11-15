@@ -29,7 +29,7 @@ parser.add_argument('--weight_decay', default=0.0001, type=float)
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
 parser.add_argument('--model', default='res18_norm', type=str)
-parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
+parser.add_argument('--n_class', default=10, type=int, help='class number in each client')
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
 args = parser.parse_args()
 

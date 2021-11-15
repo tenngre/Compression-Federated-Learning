@@ -15,7 +15,7 @@ default_workers = os.cpu_count()
 
 def arch(config):
     if config['model_name'] in models.network_names:
-        net = models.network_names[config['model']](**config['arch_kwargs'])
+        net = models.network_names[config['model_name']](**config['arch_kwargs'])
     else:
         raise ValueError(f'Invalid Arch: {config["arch"]}')
 
