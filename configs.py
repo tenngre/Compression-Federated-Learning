@@ -15,11 +15,22 @@ default_workers = os.cpu_count()
 
 def arch(config):
     if config['model_name'] in models.network_names:
-        net = models.network_names[config['model']](**config['arch_kwargs'])
+        net = models.network_names[config['model_name']](**config['arch_kwargs'])
     else:
         raise ValueError(f'Invalid Arch: {config["arch"]}')
 
     return net
+
+
+def nclass(config):
+    r = {
+        'imagenet100': 100,
+        'cifar10': 10,
+        'nuswide': 21,
+        'coco': 80
+    }[config['dataset']]
+
+    return r
 
 
 def optimizer(config, params):

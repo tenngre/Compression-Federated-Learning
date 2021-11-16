@@ -66,38 +66,43 @@ class Client(object):
                 pred_labels = prob.data.max(1, keepdim=True)[1]
 
                 correct += pred_labels.eq(labels.data.view_as(pred_labels)).long().cpu().sum()
-                train_acc = correct.item() / len(self.ldr_train.dataset)
+                training_acc = correct.item() / len(self.ldr_train.dataset)
 
                 timer.toc()
                 total_timer.toc()
 
                 # store results
                 meters['loss_total'].update(loss.item(), images.size(0))
-                meters['acc'].update(train_acc, images.size(0))
+                meters['acc'].update(training_acc, images.size(0))
                 meters['time'].update(timer.total)
-
-                print(f'Train [{batch_idx + 1}/{len(self.ldr_train)}] '
-                      f'Total Loss: {meters["loss_total"].avg:.4f} '
-                      f'A(CE): {meters["acc"].avg:.2%} '
-                      f'({timer.total:.2f}s / {total_timer.total:.2f}s)', end='\r')
 
             for key in meters: res['train_' + key] = meters[key].avg
 
             epoch_res.append(res)
 
+        print(f'Train [{batch_idx + 1}/{len(self.ldr_train)}] '
+              f'Total Loss: {meters["loss_total"].avg:.4f} '
+              f'A(CE): {meters["acc"].avg:.2%} '
+              f'({timer.total:.2f}s / {total_timer.total:.2f}s)')
+
         if config['tnt_upload']:
-            print("yes")
             w_tnt, local_error = ternary_convert(copy.deepcopy(net))  # transmit tnt error
             return w_tnt, local_error, epoch_res
 
         else:
-            print("no")
 
             return net.state_dict(), epoch_res
 
 
-def test_img(idxs, epoch, net_g, data_test, best_acc, config):
+def test_tnt(idxs, epoch, net_g, data_test, best_acc, config):
     net_g.eval()
+
+    meters = defaultdict(AverageMeter)
+    total_timer = Timer()
+    timer = Timer()
+
+    total_timer.tick()
+
     # testing
     test_loss = 0
     correct = 0
@@ -157,6 +162,88 @@ def test_img(idxs, epoch, net_g, data_test, best_acc, config):
     return acc, test_loss, best_acc
 
 
+def test_norm(model, data_test, config):
+    model.eval()
+
+    meters = defaultdict(AverageMeter)
+    total_timer = Timer()
+    timer = Timer()
+    total_timer.tick()
+
+    # testing
+    testing_loss = 0
+    correct = 0
+    total = 0
+    data_loader = DataLoader(data_test, batch_size=config['bs'])
+
+    print('Testing on GPU {}.'.format(config['device']))
+    for i, (data, labels) in enumerate(data_loader):
+        timer.tick()
+
+        with torch.no_grad():
+            data, labels = data.to(config['device']), labels.to(config['device'])
+            log_probs = model(data)
+
+            # sum up batch loss
+            testing_loss += F.cross_entropy(log_probs, labels, reduction='sum').item()
+            # get the index of the max log-probability
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            correct += y_pred.eq(labels.data.view_as(y_pred)).long().cpu().sum()
+            total += labels.size(0)
+        timer.toc()
+        total_timer.toc()
+
+        # progress_bar(idx, len(data_loader), 'Test Loss: %.3f | Test Acc: %.3f%% (%d/%d)'
+        #              % (testing_loss / total, 100. * correct / total, correct, total))
+
+        acc = correct.item() / len(data_loader.dataset)
+
+        # store results
+        meters['testing_loss_total'].update(testing_loss, data.size(0))
+        meters['testing_acc'].update(acc, data.size(0))
+        meters['time'].update(timer.total)
+
+        print(f'Test [{i + 1}/{len(data_loader)}] '
+              f'T(loss): {meters["testing_loss_total"].avg:.4f} '
+              f'A(CE): {meters["testing_acc"].avg:.2%} '
+              f'({timer.total:.2f}s / {total_timer.total:.2f}s)')
+
+    return meters
+
+    # # saving best
+    # if acc > best_acc:
+    #     print('Saving..')
+    #     state = {
+    #         # 'net': net_g.get_tnt(),  # net_g.get_tnt(),  # 'net':net.get_tnt() for tnt network // net.state_dict()
+    #         'net': net_g.get_tnt() if config['tnt_upload'] else net_g.state_dict(),
+    #         # net_g.get_tnt(),  # 'net':net.get_tnt() for tnt network // net.state_dict()
+    #         'acc': acc * 100.,
+    #         'epoch': epoch,
+    #     }
+    #     if not os.path.isdir('checkpoint'):
+    #         os.mkdir('checkpoint')
+    #     torch.save(state, './checkpoint/{}.ckpt'.format(config['history']))
+    #     best_acc = acc
+    #
+    # if config['save']:
+    #     dict_name = config['history'].split('.')[0]
+    #     path = os.path.join('./saved/', '{}/epoch_{}_{}.ckpt'.format(dict_name, epoch, config['history']))
+    #     if epoch % 10 == 0:
+    #         print('Saving..')
+    #         state = {
+    #             # 'net': net_g.get_tnt(),
+    #             'net': net_g.get_tnt() if config['tnt_upload'] else net_g.state_dict(),
+    #             # net_g.get_tnt(),  # 'net':net.get_tnt() for tnt network // net.state_dict()
+    #             'acc': acc * 100.,
+    #             'epoch': epoch,
+    #         }
+    #         if not os.path.isdir('./saved/{}'.format(dict_name)):
+    #             os.makedirs('./saved/{}'.format(dict_name))
+    #         torch.save(state, path)
+    #         best_acc = acc
+    # return acc, test_loss, best_acc
+
+
 class Aggregator(object):
     def __init__(self, config):
         self.client_num = config['client_num']
@@ -212,7 +299,6 @@ def clients_group(config):
 
 
 def main_tnt_upload(config):
-
     aggregator = Aggregator(config)
     print('==> Building model..')
 
@@ -264,12 +350,12 @@ def main_tnt_upload(config):
                                          copy.deepcopy(client_local[str(idx)]),
                                          client_net[str(idx)])
 
-        # local testing
+        # client testing
         print(f'\n |Round {epoch} Client Test {config["history"]}|\n')
         client_acc = []
         client_loss = []
         for idx in client_group.keys():
-            acc_t, loss_t, best_acc = test_img(idxs=idx,
+            acc_t, loss_t, best_acc = test_tnt(idxs=idx,
                                                epoch=epoch,
                                                net_g=client_net[str(idx)],
                                                data_test=dataset_test,
@@ -316,41 +402,39 @@ def main_tnt_upload(config):
         json.dump(his_dict, f, indent=2)
 
 
-def main_norm_upload(config, args):
-    aggregator = Aggregator(config, args)
+def main_norm_upload(config):
+    aggregator = Aggregator(config)
     print('==> Building model..')
-    inited_mode = aggregator.inited_model()
+    inited_mode = aggregator.inited_model(config)
     print(inited_mode)
 
     print('Init Clients')
-    client_group = clients_group(config, args)
+    client_group = clients_group(config)
 
     print('Deliver model to clients')
     client_net = aggregator.client_model(inited_mode)
 
-    for epoch in range(args.epochs):
+    best_acc = 0
+    current_lr = config['current_lr']
+
+    for epoch in range(config['epochs']):
         start_time = time.time()
         client_upload = {}
         acc_locals_train = {}
         loss_locals_train = []
         local_zero_rates = []
 
-        print(f'\n | Global Training Round: {epoch} Training {args.his}|\n')
+        print(f'\n | Global Training Round: {epoch} Training {config["history"]}|\n')
 
         # training
         for idx in client_group.keys():
-            w_, loss_local_train = client_group[idx].train(config,
-                                                                            net=client_net[str(idx)].to(
-                                                                                config['device']))
+            w_, res = client_group[idx].train(config,
+                                              net=client_net[str(idx)].to(config['device']))
             client_upload[str(idx)] = copy.deepcopy(w_)
 
             # recording local training info
-            acc_locals_train[str(idx)] = copy.deepcopy(acc_local_train)
-            loss_locals_train.append(copy.deepcopy(loss_local_train))
-
-            # recording local training info
-            acc_locals_train[str(idx)] = copy.deepcopy(acc_local_train)
-            loss_locals_train.append(copy.deepcopy(loss_local_train))
+            acc_locals_train[str(idx)] = copy.deepcopy(res[-1]['train_acc'])
+            loss_locals_train.append(copy.deepcopy(res[-1]['train_loss_total']))
 
         elapsed = time.time() - start_time
         train_time.append(elapsed)
@@ -366,14 +450,14 @@ def main_norm_upload(config, args):
         for idx in client_group.keys():
             client_net[str(idx)].load_state_dict(glob_avg)
 
-        # local testing
-        print(f'\n |Round {epoch} Global Test {args.his}|\n')
-        acc_t, loss_t, best_acc = test_img('all', epoch, client_net['0'],
-                                           dataset_test,
-                                           args,
-                                           best_acc)
-        test_acc.append(acc_t)
-        test_loss.append(loss_t)
+        # ====model testing===
+
+        print(f'\n |Round {epoch} Global Test {config["history"]}|\n')
+        testing_res = test_norm(model=client_net[str(0)],
+                                data_test=dataset_test,
+                                config=config)
+        test_acc.append(testing_res['testing_acc'])
+        test_loss.append(testing_res['testing_loss_total'])
 
         # training info update
         avg_acc_train = sum(acc_locals_train.values()) / len(acc_locals_train.values())
@@ -391,20 +475,12 @@ def main_norm_upload(config, args):
 
         #     writer.add_scalar("Loss/train", loss, epoch)
         #     writer.flush()
-        print('Round {} costs time: {:.2f}s| Train Acc.: {:.2%}| '
-              'Test Acc.{:.2%}| Train loss: {:.4f}| Test loss: {:.4f}| '
-              'Down Rate is {:.3%}| Up Rate{:.3%}'
-              ' Floating agg {}'.format(epoch,
-                                        elapsed,
-                                        avg_acc_train,
-                                        test_acc[-1],
-                                        loss_avg,
-                                        test_loss[-1],
-                                        cr,
-                                        temp_zero_rates,
-                                        config['glob_agg_num']))
 
-        current_lr = current_learning_rate(epoch, current_lr, args)
+        print(f'Round {epoch} costs time: {elapsed:.2f}s| Train Acc.: {avg_acc_train:.2%}| '
+              f'Test Acc.{test_acc[-1]:.2%}| Train loss: {loss_avg:.4f}| Test loss: {test_loss[-1]:.4f}| '
+              f'| Up Rate{temp_zero_rates:.3%}')
+
+        current_lr = current_learning_rate(epoch, current_lr, config)
 
     his_dict = {
         'train_loss': train_loss,
@@ -418,5 +494,5 @@ def main_norm_upload(config, args):
     }
 
     os.makedirs('./his/', exist_ok=True)
-    with open('./his/{}.json'.format(args.his), 'w+') as f:
+    with open('./his/{}.json'.format(config["history"]), 'w+') as f:
         json.dump(his_dict, f, indent=2)

@@ -1,6 +1,7 @@
 import torchvision
 import torchvision.transforms as transforms
-from models import *
+
+import configs
 from scripts.tools_noniid import *
 import json
 import os
@@ -21,6 +22,7 @@ parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--split', default='user')
 parser.add_argument('--local_ep', default=1, type=int)
+parser.add_argument('--dataset', default='cifar10', type=str)
 parser.add_argument('--bs', default=128, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
@@ -40,8 +42,6 @@ with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
     json.dump(args_dict, f)
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
-# torch.cuda.set_device(device)
 
 
 # Data
@@ -84,6 +84,7 @@ config = {
     'best_acc': 0,
     'glob_agg_num': 0,
     'device': device,
+    'dataset': args.dataset,
 
     # FL global items
     'epochs': args.epochs,
@@ -118,31 +119,22 @@ config = {
     },
     'model_name': args.model,
     'arch_kwargs': {
-        'nclass': 10,  # will be updated below
+        'nclass': 0,  # will be updated below
         # 'pretrained': True,
         # 'freeze_weight': False,
     },
-
-    # 'Model': {
-    #     'vgg_tnt': VGG_tnt,
-    #     'vgg_norm': VGG_norm,
-    #     'mobilev2_tnt': MobileNetV2_tnt,
-    #     'mobilev2_norm': MobileNetV2,
-    #     'res18_tnt': ResNet_TNT18,
-    #     'res18_norm': ResNet18,
-    #     'res50_tnt': ResNet_TNT50,
-    #     'res50_norm': ResNet50,
-    #     'alex_tnt': AlexNet_tnt,
-    #     'alex_norm': AlexNet},
 
     'log_dir': 'results',
     'history': args.his,
     'save': args.save
 }
 
+config['arch_kwargs']['nclass'] = configs.nclass(config)
+# config['R'] = configs.R(config)
+
 if __name__ == '__main__':
 
     if args.tnt_upload:
         training.main_tnt_upload(config)
     else:
-        training.main_norm_upload(config, args)
+        training.main_norm_upload(config)
