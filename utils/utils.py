@@ -43,7 +43,7 @@ def init_params(net):
 
 # _, term_width = os.popen('stty size', 'r').read().split()  # Can only run in Linux
 # term_width = int(term_width)
-term_width = os.get_terminal_size().columns
+# term_width = os.get_terminal_size().columns
 
 TOTAL_BAR_LENGTH = 65.
 last_time = time.time()

@@ -17,7 +17,7 @@ def arch(config):
     if config['model_name'] in models.network_names:
         net = models.network_names[config['model_name']](**config['arch_kwargs'])
     else:
-        raise ValueError(f'Invalid Arch: {config["arch"]}')
+        raise ValueError(f'Invalid Arch: {config["model_name"]}')
 
     return net
 

@@ -108,30 +108,27 @@ def current_learning_rate(epoch, current_lr, config):
 
 
 def ternary_convert(network):
-    net_error = copy.deepcopy(network)  # create a network for saving local errors
-    w = copy.deepcopy(network.state_dict())  # for local weights
-    w_error = copy.deepcopy(net_error.state_dict())  # for local errors
+    with torch.no_grad():
+        qua_net = copy.deepcopy(network)  # create a network for quantify errors
+        qua_params = copy.deepcopy(network.state_dict())  # for quantify parameters
+        qua_error = copy.deepcopy(qua_net.state_dict())  # for local errors
 
-    for name, module in network.named_modules():  # calculating errors between normal weights and errors
-        if isinstance(module, TNTConv2d):
-            #             print('convolution ternary')
-            w[name + str('.weight')] = KernelsCluster.apply(module.weight)  # tnt
-            w_error[name + str('.weight')] -= w[name + str('.weight')]  # errors
+        for name, module in network.named_modules():  # calculating errors between normal weights and errors
+            if isinstance(module, TNTConv2d):
+                qua_params[name + str('.weight')] = KernelsCluster.apply(module.weight)  # tnt
+                qua_error[name + str('.weight')] -= qua_params[name + str('.weight')]  # errors
 
-        if isinstance(module, TNTLinear):
-            #             print('linear ternary')
-            w[name + str('.weight')] = KernelsCluster.apply(module.weight)
-            w_error[name + str('.weight')] -= w[name + str('.weight')]
+            if isinstance(module, TNTLinear):
+                qua_params[name + str('.weight')] = KernelsCluster.apply(module.weight)
+                qua_error[name + str('.weight')] -= qua_params[name + str('.weight')]
 
-    network.load_state_dict(w, strict=False)  # load tnt to model
-    tnt_weights_dict = network.state_dict()  # creating a tensor form dict
+        network.load_state_dict(qua_params, strict=False)  # load tnt to model
+        qua_net.load_state_dict(qua_error, strict=False)  # load quantify error
 
-    net_error.load_state_dict(w_error, strict=False)
-    tnt_error_dict = net_error.state_dict()
-    t = zero_rates(tnt_weights_dict)
-    print('[INFO] zero rates is ', t)
+        ter_weights_dict = network.state_dict()  # creating a tensor form dict
+        qua_error_dict = qua_net.state_dict()
 
-    return tnt_weights_dict, tnt_error_dict
+    return ter_weights_dict, qua_error_dict
 
 
 def float_pass(tnt, w, network):
@@ -143,52 +140,21 @@ def float_pass(tnt, w, network):
     return pass_w
 
 
-def FedAvg(w_dict, acc_dict, num):
-    #     for i in range(num):
-    #         lowest_acc_idx = min(acc_dict, key=acc_dict.get)
-    #         w_dict.pop(lowest_acc_idx)
-    #         acc_dict.pop(lowest_acc_idx)
-    w = list(w_dict.values())
-
-    w_avg = copy.deepcopy(w[0])
-    # for k in w_avg.keys():
-    #     w_count = (w_avg[k] != 0).float()
-    #     for i in range(1, len(w)):
-    #         w_avg[k] += w[i][k]
-    #         mask = (w[i][k] != 0).float()
-    #         w_count += mask
-    #     w_avg[k] = torch.div(w_avg[k], w_count + 1e-7)
-
-    for k in w_avg.keys():
-        for i in range(1, len(w)):
-            w_avg[k] += w[i][k]
-        w_avg[k] = torch.div(w_avg[k], float(len(w)))
-
-    total_params = 0
-    zero_params = 0
-    for key in w_avg.keys():
-        zero_params += (w_avg[key].view(-1) == 0).sum().item()
-        total_params += len(w_avg[key].view(-1))
-
-    return w_avg, (zero_params / total_params)
-
-
-def rec_w(avg_tnt, local_err, net):
+def rec_w(global_avg, qua_err, network):
     # recover weights from avg_tnt and local_err
-    for name, module in net.named_modules():
+    for name, module in network.named_modules():
         if isinstance(module, TNTConv2d):
-            avg_tnt[name + str('.weight')] += local_err[name + str('.weight')]
+            global_avg[name + str('.weight')] += qua_err[name + str('.weight')]
         if isinstance(module, TNTLinear):
-            avg_tnt[name + str('.weight')] += local_err[name + str('.weight')]
-    net.load_state_dict(avg_tnt)
-    return net
+            global_avg[name + str('.weight')] += qua_err[name + str('.weight')]
+    network.load_state_dict(global_avg)
+    return network
 
 
 def zero_rates(weight_dict):
     total_params = 0
     zero_params = 0
     for key in weight_dict.keys():
-        #         print(key)
         zero_params += (weight_dict[key].view(-1) == 0).sum().item()
         total_params += len(weight_dict[key].view(-1))
     return zero_params / total_params
@@ -213,6 +179,3 @@ def WeightsUpdate(global_new, global_old, omiga):
         param.data.copy_(old_weights[name])
         # param.requires_grad = True
     # return global_old
-
-
-
