@@ -84,7 +84,16 @@ config = {
     'best_acc': 0,
     'glob_agg_num': 0,
     'device': device,
+    # dataset
     'dataset': args.dataset,
+    'dataset_kwargs': {
+        'resize': 256 if args.dataset in ['nuswide'] else 224,
+        'crop': 224,
+        'norm': 2,
+        'evaluation_protocol': 1,  # only affect cifar10
+        'reset': False,
+        'separate_multiclass': False,
+    },
 
     # FL global items
     'epochs': args.epochs,
