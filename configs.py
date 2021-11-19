@@ -70,6 +70,17 @@ def scheduler(config, optimizer):
         raise Exception('Scheduler not supported yet: ' + s_type)
 
 
+def dataloader(d, bs=256, shuffle=True, workers=-1, drop_last=True):
+    if workers < 0:
+        workers = default_workers
+    l = DataLoader(d,
+                   bs,
+                   shuffle,
+                   drop_last=drop_last,
+                   num_workers=workers)
+    return l
+
+
 def compose_transform(mode='train', resize=0, crop=0, norm=0,
                       augmentations=None):
     """

@@ -9,11 +9,14 @@ import os
 
 from scripts import DatasetSplit, zero_rates, ternary_convert, current_learning_rate, rec_w
 from tnt_fl_train_noniid import dataset_test
-from utils.utils import progress_bar
+import logging
 import torch.nn as nn
 import numpy as np
+
+from utils.datasets import cifar_non_iid
 from utils.misc import AverageMeter, Timer
 import torch.nn.functional as F
+from pprint import pprint
 
 import configs
 
@@ -215,6 +218,15 @@ class Aggregator(object):
 def clients_group(config):
     m = max(int(config['client_frac'] * config['client_num']), 1)
     users_index = np.random.choice(range(config['client_num']), m, replace=False)
+    print(config['client_train_data'])
+
+    train_dataset = prepare_dataloader(config)
+    test_dataset = prepare_dataloader(config)
+    dict_users_train, dict_users_test = cifar_non_iid(train_dataset,
+                                                      test_dataset,
+                                                      config)
+    config['client_train_data'] = config['client_train_data'].get('client_train_data', train_dataset)
+    config['client_test_data'] = config['client_test_data'].get('client_test_data', dict_users_test)
 
     client_group = {}
     for idx in users_index:
@@ -227,19 +239,40 @@ def clients_group(config):
     return client_group
 
 
+def prepare_dataloader(config):
+    logging.info('Creating Datasets')
+    train_dataset = configs.dataset(config, filename='train.txt', transform_mode='train')
+    logging.info(f'Number of Train data: {len(train_dataset)}')
+
+    test_dataset = configs.dataset(config, filename='test.txt', transform_mode='test')
+
+    train_loader = configs.dataloader(train_dataset, config['batch_size'])
+    test_loader = configs.dataloader(test_dataset, config['batch_size'], shuffle=False, drop_last=False)
+
+    return train_loader, test_loader
+
+
 def main_tnt_upload(config):
+    logdir = config['logdir']
+    assert logdir != '', 'please input logdir'
+
+    pprint(config)
+
+    os.makedirs(f'{logdir}/models', exist_ok=True)
+    os.makedirs(f'{logdir}/optims', exist_ok=True)
+    os.makedirs(f'{logdir}/outputs', exist_ok=True)
+    json.dump(config, open(f'{logdir}/config.json', 'w+'), indent=4, sort_keys=True)
+
     aggregator = Aggregator(config)
 
     print('==> Building model..')
     inited_mode = aggregator.inited_model()
     print(inited_mode)
-
-    print('Init Clients')
-    client_group = clients_group(config)
-
     print('Deliver model to clients')
     client_net = aggregator.client_model(inited_mode)
 
+    print('Init Clients')
+    client_group = clients_group(config)
     current_lr = config['current_lr']
 
     for epoch in range(config['epochs']):

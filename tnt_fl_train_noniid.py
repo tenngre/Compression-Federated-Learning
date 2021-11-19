@@ -65,10 +65,10 @@ dataset_test = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
                                             train=False, download=True,
                                             transform=transform_test)
 
-dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
-                                                      dataset_test,
-                                                      args.num_users,
-                                                      args.n_class)
+# dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
+#                                                       dataset_test,
+#                                                       args.num_users,
+#                                                       args.n_class)
 
 def random_seed(seed):
     random.seed(seed)
@@ -103,9 +103,10 @@ config = {
     'current_lr': args.lr,
 
     # FL client
-    'client_train_data': dict_users_train,
-    'client_test_data': dict_users_test,
+    'client_train_data': 0,
+    'client_test_data': 0,
     'client_num': args.num_users,
+    'n_class': args.n_class,
     'client_frac': args.frac,
     'tnt_upload': args.tnt_upload,
     'local_bs': args.local_bs,
@@ -140,6 +141,30 @@ config = {
 
 config['arch_kwargs']['nclass'] = configs.nclass(config)
 # config['R'] = configs.R(config)
+
+logdir = (f'./hhxxttxs/{config["model_name"]}{config["arch_kwargs"]["nclass"]}_'
+          f'{config["dataset"]}_{config["dataset_kwargs"]["evaluation_protocol"]}_'
+          f'{config["epochs"]}_')
+
+# if config['tag'] != '':
+#     logdir += f'/{config["tag"]}_{config["seed"]}_'
+# else:
+#     logdir += f'/{config["seed"]}_'
+
+# make sure no overwrite problem
+count = 0
+orig_logdir = logdir
+logdir = orig_logdir + f'{count:03d}'
+
+while os.path.isdir(logdir):
+    count += 1
+    logdir = orig_logdir + f'{count:03d}'
+
+config['logdir'] = logdir
+
+count = 0
+orig_logdir = logdir
+logdir = orig_logdir + f'{count:03d}'
 
 if __name__ == '__main__':
 
