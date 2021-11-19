@@ -1,26 +1,7 @@
 from ternay.convert_tnt import *
 import copy
-import math
 import numpy as np
 from torch.utils.data import Dataset
-
-
-def cifar_iid(dataset, num_users):
-    """
-    Sample I.I.D. client data from CIFAR10 dataset
-    :param dataset:
-    :param num_users:
-    :return: dict of image index
-    """
-    num_items = int(len(dataset) / num_users)  # numbers of items in one client
-    dict_users, all_idxs = {}, [i for i in range(len(dataset))]  # dict_user for recording the client number;
-    # all_idxs is the indx of each item
-    for i in range(num_users):  # choosing training data for each client
-        dict_users[i] = set(np.random.choice(all_idxs, num_items,
-                                             replace=False))  # randomly choose ##num_items## items for a client
-        # without replacing
-        all_idxs = list(set(all_idxs) - dict_users[i])  # remove selected items
-    return dict_users  # contains the training data for each client i
 
 
 class DatasetSplit(Dataset):

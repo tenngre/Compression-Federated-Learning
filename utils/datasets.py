@@ -2,19 +2,40 @@ import os
 
 import numpy as np
 import torch
+import math
 from torch.utils.data import Dataset
 from torchvision.datasets import CIFAR10, CIFAR100
 from torchvision.datasets.folder import pil_loader
 
+
 DATA_FOLDER = {
     # 'nuswide': 'data/nuswide_v2_256_resize',  # resize to 256x256
     # 'imagenet': 'data/imagenet_resize',  # resize to 224x224
-    'cifar': './data/datasets/cifar'  # auto generate
+    'cifar': './data/cifar'  # auto generate
     # 'coco': 'data/coco',
     # 'gldv2': 'data/gldv2delgembed',
     # 'roxf': 'data/roxford5kdelgembed',
     # 'rpar': 'data/rparis5kdelgembed'
 }
+
+
+def cifar_iid(dataset, num_users):
+    """
+    Sample I.I.D. client data from CIFAR10 dataset
+    :param dataset:
+    :param num_users:
+    :return: dict of image index
+    """
+    num_items = int(len(dataset) / num_users)  # number of items in one client
+    dict_users, all_idxs = {}, [i for i in range(len(dataset))]  # dict_user for recording the client number;
+    # all_idxs is the indx of each item
+    for i in range(num_users):  # choosing training data for each client
+        dict_users[i] = set(np.random.choice(all_idxs,
+                                             num_items,
+                                             replace=False))  # randomly choose ##num_items## items for a client
+        # without replacing
+        all_idxs = list(set(all_idxs) - dict_users[i])  # remove selected items
+    return dict_users  # contains the training data for each client i
 
 
 def cifar(nclass, **kwargs):
@@ -28,7 +49,8 @@ def cifar(nclass, **kwargs):
     CIFAR = CIFAR10 if int(nclass) == 10 else CIFAR100
     traind = CIFAR(f'{prefix}{nclass}',
                    transform=transform,
-                   train=True, download=True)
+                   train=True,
+                   download=True)
     testd = CIFAR(f'{prefix}{nclass}', train=False, download=True)
 
     combine_data = np.concatenate([traind.data, testd.data], axis=0)
@@ -96,6 +118,7 @@ def cifar(nclass, **kwargs):
 def cifar_non_iid(train_dataset, test_dataset, config):
     num_users = config['client_num']
     n_class = config['n_class']
+
     num_shards_train = num_users * n_class  # minimum shard needed
     num_classes = 10
     num_imgs_perc_test, num_imgs_test_total = 1000, 10000

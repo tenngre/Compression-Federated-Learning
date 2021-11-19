@@ -8,16 +8,16 @@ from torch.utils.data import DataLoader
 import os
 
 from scripts import DatasetSplit, zero_rates, ternary_convert, current_learning_rate, rec_w
-from tnt_fl_train_noniid import dataset_test
+# from tnt_fl_train_noniid import dataset_test
 import logging
 import torch.nn as nn
 import numpy as np
 
-from utils.datasets import cifar_non_iid
+from utils.datasets import cifar_iid
 from utils.misc import AverageMeter, Timer
 import torch.nn.functional as F
 from pprint import pprint
-
+from configs import *
 import configs
 
 train_acc, train_loss = [], []
@@ -31,9 +31,7 @@ class Client(object):
     def __init__(self, config, dataset=None, idxs=None, client=None):
         self.loss_func = nn.CrossEntropyLoss()
         self.selected_clients = []
-        self.ldr_train = DataLoader(DatasetSplit(dataset, idxs),
-                                    batch_size=config['local_bs'],
-                                    shuffle=True)
+        self.ldr_train = dataloader(dataset, batch_size=config['local_bs'], shuffle=False, drop_last=False)
         self.client = client
         self.device = config['device']
         self.ternary_convert = config['tnt_upload']
@@ -215,41 +213,42 @@ class Aggregator(object):
             return w_avg
 
 
+def prepare_dataset(config):
+    logging.info('Creating Datasets')
+    train_dataset = configs.dataset(config, filename='train.txt', transform_mode='train')
+    logging.info(f'Number of Train data: {len(train_dataset)}')
+    test_dataset = configs.dataset(config, filename='test.txt', transform_mode='test')
+
+    return train_dataset, test_dataset
+
+
 def clients_group(config):
     m = max(int(config['client_frac'] * config['client_num']), 1)
     users_index = np.random.choice(range(config['client_num']), m, replace=False)
-    print(config['client_train_data'])
 
-    train_dataset = prepare_dataloader(config)
-    test_dataset = prepare_dataloader(config)
-    dict_users_train, dict_users_test = cifar_non_iid(train_dataset,
-                                                      test_dataset,
-                                                      config)
-    config['client_train_data'] = config['client_train_data'].get('client_train_data', train_dataset)
-    config['client_test_data'] = config['client_test_data'].get('client_test_data', dict_users_test)
+    train_dataset, test_dataset = prepare_dataset(config)
+
+    clients_datasets = cifar_iid(train_dataset, config['client_num'])
+
+    config['train_set'] = train_dataset
+    config['test_set'] = test_dataset
+
+    # dict_users_train, dict_users_test = cifar_non_iid(train_dataset,
+    #                                                   test_dataset,
+    #                                                   config)
+
+    config['client_train_data'] = clients_datasets
+    config['client_test_data'] = test_dataset
 
     client_group = {}
     for idx in users_index:
         client = Client(config=config,
-                        dataset=config['train_set'],
-                        idxs=np.int_(config['client_train_data'][idx]),
+                        dataset=config['client_train_data'],
+                        idxs=idx,
                         client=idx)
         client_group[idx] = client
 
     return client_group
-
-
-def prepare_dataloader(config):
-    logging.info('Creating Datasets')
-    train_dataset = configs.dataset(config, filename='train.txt', transform_mode='train')
-    logging.info(f'Number of Train data: {len(train_dataset)}')
-
-    test_dataset = configs.dataset(config, filename='test.txt', transform_mode='test')
-
-    train_loader = configs.dataloader(train_dataset, config['batch_size'])
-    test_loader = configs.dataloader(test_dataset, config['batch_size'], shuffle=False, drop_last=False)
-
-    return train_loader, test_loader
 
 
 def main_tnt_upload(config):
@@ -318,7 +317,7 @@ def main_tnt_upload(config):
         for idx in client_group.keys():
             print('Client {} Testing on GPU {}.'.format(idx, config['device']))
             testing_res = test(model=client_net[str(idx)],
-                               data_test=dataset_test,
+                               data_test=config['client_test_data'],
                                config=config)
 
             test_acc.append(testing_res['testing_acc'])
@@ -414,7 +413,7 @@ def main_norm_upload(config):
 
         print(f'\n |Round {epoch} Global Test {config["history"]}|\n')
         testing_res = test(model=client_net[str(0)],
-                           data_test=dataset_test,
+                           data_test=config['client_test_data'],
                            config=config)
 
         test_acc.append(testing_res['testing_acc'])

@@ -1,6 +1,3 @@
-import torchvision
-import torchvision.transforms as transforms
-
 import configs
 from scripts.tools_noniid import *
 import json
@@ -28,8 +25,8 @@ parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
 parser.add_argument('--tnt_upload', action='store_false', help='uploading tnt weights')
 parser.add_argument('--weight_decay', default=0.0001, type=float)
-parser.add_argument('--resume', '-r', action='store_true',
-                    help='resume from checkpoint')
+parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
+parser.add_argument('--seed', default=80, type=int)
 parser.add_argument('--model', default='vgg_tnt', type=str)
 parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
@@ -43,27 +40,27 @@ with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-
 # Data
-print('==> Preparing data..')
-transform_train = transforms.Compose([
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomCrop(32, padding=4),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+# print('==> Preparing data..')
+# transform_train = transforms.Compose([
+#     transforms.RandomHorizontalFlip(),
+#     transforms.RandomCrop(32, padding=4),
+#     transforms.ToTensor(),
+#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+#
+# transform_test = transforms.Compose([
+#     transforms.ToTensor(),
+#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+# ])
+#
+# dataset_train = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
+#                                              train=True, download=True,
+#                                              transform=transform_train)
+#
+# dataset_test = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
+#                                             train=False, download=True,
+#                                             transform=transform_test)
 
-transform_test = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
-
-dataset_train = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
-                                             train=True, download=True,
-                                             transform=transform_train)
-
-dataset_test = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
-                                            train=False, download=True,
-                                            transform=transform_test)
 
 # dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
 #                                                       dataset_test,
@@ -76,7 +73,6 @@ def random_seed(seed):
     np.random.seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-random_seed(80)
 
 config = {
     # 'current_lr': args.lr,
@@ -90,7 +86,7 @@ config = {
         'resize': 256 if args.dataset in ['nuswide'] else 224,
         'crop': 224,
         'norm': 2,
-        'evaluation_protocol': 1,  # only affect cifar10
+        'evaluation_protocol': 2,  # only affect cifar10
         'reset': False,
         'separate_multiclass': False,
     },
@@ -98,9 +94,10 @@ config = {
     # FL global items
     'epochs': args.epochs,
     'bs': args.bs,
-    'train_set': dataset_train,
-    'test_set': dataset_test,
+    'train_set': 0,
+    'test_set': 0,
     'current_lr': args.lr,
+    'seed': args.seed,
 
     # FL client
     'client_train_data': 0,
@@ -136,20 +133,21 @@ config = {
 
     'log_dir': 'results',
     'history': args.his,
-    'save': args.save
+    'save': args.save,
+    'tag': 'TNT'
 }
 
 config['arch_kwargs']['nclass'] = configs.nclass(config)
 # config['R'] = configs.R(config)
 
-logdir = (f'./hhxxttxs/{config["model_name"]}{config["arch_kwargs"]["nclass"]}_'
+logdir = (f'./{config["model_name"]}{config["arch_kwargs"]["nclass"]}_'
           f'{config["dataset"]}_{config["dataset_kwargs"]["evaluation_protocol"]}_'
           f'{config["epochs"]}_')
 
-# if config['tag'] != '':
-#     logdir += f'/{config["tag"]}_{config["seed"]}_'
-# else:
-#     logdir += f'/{config["seed"]}_'
+if config['tag'] != '':
+    logdir += f'/{config["tag"]}_{config["seed"]}_'
+else:
+    logdir += f'/{config["seed"]}_'
 
 # make sure no overwrite problem
 count = 0
@@ -167,7 +165,7 @@ orig_logdir = logdir
 logdir = orig_logdir + f'{count:03d}'
 
 if __name__ == '__main__':
-
+    random_seed(config['seed'])
     if args.tnt_upload:
         training.main_tnt_upload(config)
     else:

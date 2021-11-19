@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 import models
-# from utils import datasets
 from utils import datasets
 
 default_workers = os.cpu_count()
