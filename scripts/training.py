@@ -28,10 +28,10 @@ update_zero_rate = []
 
 
 class Client(object):
-    def __init__(self, config, dataset=None, idxs=None, client=None):
+    def __init__(self, config, dataset=None, client=None):
         self.loss_func = nn.CrossEntropyLoss()
-        self.selected_clients = []
-        self.ldr_train = dataloader(dataset, batch_size=config['local_bs'], shuffle=False, drop_last=False)
+        # self.selected_clients = []
+        self.ldr_train = dataloader(dataset)
         self.client = client
         self.device = config['device']
         self.ternary_convert = config['tnt_upload']
@@ -234,8 +234,7 @@ def clients_group(config):
     client_group = {}
     for idx in users_index:
         client = Client(config=config,
-                        dataset=config['client_train_data'][idx],
-                        idxs=idx,
+                        dataset=train_dataset[idx],
                         client=idx)
         client_group[idx] = client
 

@@ -87,7 +87,7 @@ config = {
         'crop': 224,
         'norm': 2,
         'evaluation_protocol': 2,  # only affect cifar10
-        'reset': False,
+        'reset': True,
         'separate_multiclass': False,
     },
 

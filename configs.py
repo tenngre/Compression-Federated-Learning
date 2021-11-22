@@ -69,14 +69,14 @@ def scheduler(config, optimizer):
         raise Exception('Scheduler not supported yet: ' + s_type)
 
 
-def dataloader(d, bs=256, shuffle=True, workers=-1, drop_last=True):
-    if workers < 0:
-        workers = default_workers
+def dataloader(d, bs=256, shuffle=True, drop_last=False):
+    # if workers < 0:
+    #     workers = default_workers
+
     l = DataLoader(d,
                    bs,
                    shuffle,
-                   drop_last=drop_last,
-                   num_workers=workers)
+                   drop_last=drop_last)
     return l
 
 

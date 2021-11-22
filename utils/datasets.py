@@ -50,13 +50,11 @@ def cifar_iid(nclass, **kwargs):
         print(f'Loading {path}')
         data_index = torch.load(path)
     else:
-
         train_data_index = []
         query_data_index = []
         db_data_index = []
 
         data_id = np.arange(combine_data.shape[0])  # [0, 1, ...]
-        print(data_id.shape)
 
         for i in range(nclass):
             class_mask = combine_targets == i
@@ -73,28 +71,21 @@ def cifar_iid(nclass, **kwargs):
             query_data_index.extend(index_for_query)
             db_data_index.extend(index_for_db)
 
-        train_data_index = np.array(train_data_index).flatten()
+        # train_data_index = np.array(train_data_index)
         query_data_index = np.array(query_data_index)
         db_data_index = np.array(db_data_index)
 
         num_items = int(len(train_data_index) / num_users)  # number of items in one client
         dict_client_data_index = {}  # dict_user for recording the client number;
 
-        # all_idxs is the indx of each item
-
         for i in range(num_users):  # choosing training data for each client
-
             dict_client_data_index[i] = set(np.random.choice(train_data_index,
                                                              num_items,
                                                              replace=False))  # randomly choose ##num_items## items
-            print(len(set(train_data_index)))
-            print(len(set(dict_client_data_index[i])))
             # for a client
             # without replacing
-            train_data_index = np.array(
-                set(train_data_index) - dict_client_data_index[i]).flatten()  # remove selected items
-            print(len(set(train_data_index)))
-            print(len(set(dict_client_data_index[i])))
+            train_data_index = list(set(train_data_index) - dict_client_data_index[i]) # remove selected items
+            dict_client_data_index[i] = np.array(list(dict_client_data_index[i]))
 
         torch.save(dict_client_data_index, f'./data/cifar{nclass}/iid_{ep}_train.txt')
         torch.save(query_data_index, f'./data/cifar{nclass}/iid_{ep}_test.txt')
@@ -103,12 +94,10 @@ def cifar_iid(nclass, **kwargs):
         client_data = {}
         if fn == 'train.txt':
             for idx in range(num_users):
-                traind.data = combine_data[train_data_index[idx]]
-                traind.targets = combine_targets[train_data_index[idx]]
+                traind.data = combine_data[dict_client_data_index[idx]]
+                traind.targets = combine_targets[dict_client_data_index[idx]]
                 client_data[idx] = traind
-
             return client_data
-
         else:
             data_index = {
                 'test.txt': query_data_index,
