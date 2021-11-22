@@ -181,6 +181,11 @@ def dataset(config, filename, transform_mode):
         else:
             transform = compose_transform('test', resizec, cropc, norm)
         ep = config['dataset_kwargs'].get('evaluation_protocol', 1)
-        d = datasets.cifar(nclass, transform=transform, filename=filename, evaluation_protocol=ep, reset=reset)
+        d = datasets.cifar_iid(nclass,
+                               transform=transform,
+                               filename=filename,
+                               evaluation_protocol=ep,
+                               num_users=config['client_num'],
+                               reset=reset)
 
     return d

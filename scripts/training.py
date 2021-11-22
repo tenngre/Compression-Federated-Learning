@@ -228,22 +228,13 @@ def clients_group(config):
 
     train_dataset, test_dataset = prepare_dataset(config)
 
-    clients_datasets = cifar_iid(train_dataset, config['client_num'])
-
     config['train_set'] = train_dataset
     config['test_set'] = test_dataset
-
-    # dict_users_train, dict_users_test = cifar_non_iid(train_dataset,
-    #                                                   test_dataset,
-    #                                                   config)
-
-    config['client_train_data'] = clients_datasets
-    config['client_test_data'] = test_dataset
 
     client_group = {}
     for idx in users_index:
         client = Client(config=config,
-                        dataset=config['client_train_data'],
+                        dataset=config['client_train_data'][idx],
                         idxs=idx,
                         client=idx)
         client_group[idx] = client
