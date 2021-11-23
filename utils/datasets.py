@@ -84,30 +84,31 @@ def cifar_iid(nclass, **kwargs):
                                                              replace=False))  # randomly choose ##num_items## items
             # for a client
             # without replacing
-            train_data_index = list(set(train_data_index) - dict_client_data_index[i]) # remove selected items
+            train_data_index = list(set(train_data_index) - dict_client_data_index[i])  # remove selected items
             dict_client_data_index[i] = np.array(list(dict_client_data_index[i]))
+
+        data_index = {
+            'train.txt': dict_client_data_index,
+            'test.txt': query_data_index,
+            'database.txt': db_data_index
+        }[fn]
 
         torch.save(dict_client_data_index, f'./data/cifar{nclass}/iid_{ep}_train.txt')
         torch.save(query_data_index, f'./data/cifar{nclass}/iid_{ep}_test.txt')
         torch.save(db_data_index, f'./data/cifar{nclass}/iid_{ep}_database.txt')
 
-        client_data = {}
-        if fn == 'train.txt':
-            for idx in range(num_users):
-                traind.data = combine_data[dict_client_data_index[idx]]
-                traind.targets = combine_targets[dict_client_data_index[idx]]
-                client_data[idx] = traind
-            return client_data
-        else:
-            data_index = {
-                'test.txt': query_data_index,
-                'database.txt': db_data_index
-            }[fn]
+    client_data = {}
+    if fn == 'train.txt':
+        for idx in range(num_users):
+            traind.data = combine_data[data_index[idx]]
+            traind.targets = combine_targets[data_index[idx]]
+            client_data[idx] = traind
+        return client_data
+    else:
+        traind.data = combine_data[data_index]
+        traind.targets = combine_targets[data_index]
 
-            traind.data = combine_data[data_index]
-            traind.targets = combine_targets[data_index]
-
-            return traind  # contains the training data for each client i
+        return traind  # contains the training data for each client i
 
 
 def cifar(nclass, **kwargs):

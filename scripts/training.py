@@ -46,7 +46,7 @@ class Client(object):
         total_timer.tick()
         epoch_res = []
 
-        print(f'Client {self.client} is training on GPU {self.device}.')
+        logging.info(f'Client {self.client} is training on GPU {self.device}.')
         for ep in range(config['local_ep']):
             meters = defaultdict(AverageMeter)
             res = {'ep': ep + 1}
@@ -109,16 +109,17 @@ def test(model, data_test, config):
     total = 0
     data_loader = DataLoader(data_test, batch_size=config['bs'])
 
-    print('Testing on GPU {}.'.format(config['device']))
+    logging.info(f'Testing on GPU {config["device"]}.')
     for i, (data, labels) in enumerate(data_loader):
         timer.tick()
 
         with torch.no_grad():
             data, labels = data.to(config['device']), labels.to(config['device'])
+            print(labels)
             log_probs = model(data)
 
             # sum up batch loss
-            testing_loss += F.cross_entropy(log_probs, labels, reduction='sum').item()
+            testing_loss += F.cross_entropy(log_probs, labels, reduction='sum')
             # get the index of the max log-probability
             y_pred = log_probs.data.max(1, keepdim=True)[1]
             correct += y_pred.eq(labels.data.view_as(y_pred)).long().cpu().sum()
@@ -218,6 +219,7 @@ def prepare_dataset(config):
     train_dataset = configs.dataset(config, filename='train.txt', transform_mode='train')
     logging.info(f'Number of Train data: {len(train_dataset)}')
     test_dataset = configs.dataset(config, filename='test.txt', transform_mode='test')
+    logging.info(f'Number of Test data: {len(test_dataset)}')
 
     return train_dataset, test_dataset
 
@@ -227,6 +229,7 @@ def clients_group(config):
     users_index = np.random.choice(range(config['client_num']), m, replace=False)
 
     train_dataset, test_dataset = prepare_dataset(config)
+    print(len(test_dataset.targets))
 
     config['train_set'] = train_dataset
     config['test_set'] = test_dataset
@@ -282,7 +285,7 @@ def main_tnt_upload(config):
             client_upload[str(idx)] = copy.deepcopy(ter_params)
             z_r = zero_rates(ter_params)
             local_zero_rates.append(z_r)
-            print('Client {} zero rate {:.2%}'.format(idx, z_r))
+            logging.info(f'Client {idx} zero rate {z_r:.2%}')
 
             # recording local training info
             acc_locals_train[str(idx)] = copy.deepcopy(res[-1]['train_acc'])
@@ -301,13 +304,13 @@ def main_tnt_upload(config):
                                          client_net[str(idx)])
 
         # client testing
-        print(f'\n |Round {epoch} Client Test {config["history"]}|\n')
+        logging.info(f'\n |Round {epoch} Client Test {config["history"]}|\n')
         client_acc = []
         client_loss = []
         for idx in client_group.keys():
-            print('Client {} Testing on GPU {}.'.format(idx, config['device']))
+            logging.info(f'Client {idx} Testing on GPU {config["device"]}.')
             testing_res = test(model=client_net[str(idx)],
-                               data_test=config['client_test_data'],
+                               data_test=config['test_set'],
                                config=config)
 
             test_acc.append(testing_res['testing_acc'])

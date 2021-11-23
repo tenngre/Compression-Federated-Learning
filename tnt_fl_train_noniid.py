@@ -83,8 +83,8 @@ config = {
     # dataset
     'dataset': args.dataset,
     'dataset_kwargs': {
-        'resize': 256 if args.dataset in ['nuswide'] else 224,
-        'crop': 224,
+        'resize': 256 if args.dataset in ['nuswide'] else 32,
+        'crop': 32,
         'norm': 2,
         'evaluation_protocol': 2,  # only affect cifar10
         'reset': True,
@@ -100,8 +100,6 @@ config = {
     'seed': args.seed,
 
     # FL client
-    'client_train_data': 0,
-    'client_test_data': 0,
     'client_num': args.num_users,
     'n_class': args.n_class,
     'client_frac': args.frac,
