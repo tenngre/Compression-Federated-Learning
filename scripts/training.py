@@ -114,8 +114,8 @@ def test(model, data_test, config):
         timer.tick()
 
         with torch.no_grad():
-            data, labels = data.to(config['device']), labels.to(config['device'])
-            print(labels)
+            data = data.to(config['device'])
+            labels = labels.float().to(config['device'])
             log_probs = model(data)
 
             # sum up batch loss
