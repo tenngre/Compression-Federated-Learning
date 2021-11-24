@@ -31,7 +31,7 @@ class Client(object):
     def __init__(self, config, dataset=None, client=None):
         self.loss_func = nn.CrossEntropyLoss()
         # self.selected_clients = []
-        self.ldr_train = dataloader(dataset)
+        self.ldr_train = dataloader(dataset, config['local_bs'])
         self.client = client
         self.device = config['device']
         self.ternary_convert = config['tnt_upload']
