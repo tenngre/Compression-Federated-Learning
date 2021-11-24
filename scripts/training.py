@@ -91,7 +91,6 @@ class Client(object):
             return w_tnt, local_error, epoch_res
 
         else:
-
             return net.state_dict(), epoch_res
 
 
@@ -121,7 +120,7 @@ def test(model, data_test, config):
 
             # sum up batch loss
             testing_loss += loss_func(log_probs, labels)
-                # F.cross_entropy(log_probs, labels, reduction='sum')
+            # F.cross_entropy(log_probs, labels, reduction='sum')
             # get the index of the max log-probability
             y_pred = log_probs.data.max(1, keepdim=True)[1]
             correct += y_pred.eq(labels.data.view_as(y_pred)).long().cpu().sum()
@@ -408,7 +407,7 @@ def main_norm_upload(config):
 
         print(f'\n |Round {epoch} Global Test {config["history"]}|\n')
         testing_res = test(model=client_net[str(0)],
-                           data_test=config['client_test_data'],
+                           data_test=config['test_set'],
                            config=config)
 
         test_acc.append(testing_res['testing_acc'])

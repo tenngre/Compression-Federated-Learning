@@ -23,11 +23,11 @@ parser.add_argument('--dataset', default='cifar10', type=str)
 parser.add_argument('--bs', default=128, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
-parser.add_argument('--tnt_upload', action='store_false', help='uploading tnt weights')
+parser.add_argument('--tnt_upload', action='store_true', help='uploading tnt weights')
 parser.add_argument('--weight_decay', default=0.0001, type=float)
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--seed', default=80, type=int)
-parser.add_argument('--model', default='vgg_tnt', type=str)
+parser.add_argument('--model', default='vgg_norm', type=str)
 parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
 args = parser.parse_args()
@@ -101,7 +101,6 @@ config = {
         # 'pretrained': True,
         # 'freeze_weight': False,
     },
-
     'log_dir': 'results',
     'history': args.his,
     'save': args.save,
@@ -137,7 +136,9 @@ logdir = orig_logdir + f'{count:03d}'
 
 if __name__ == '__main__':
     random_seed(config['seed'])
-    if args.tnt_upload:
+    if config['tnt_upload']:
+        print('YES')
         training.main_tnt_upload(config)
     else:
+        print('NO')
         training.main_norm_upload(config)
