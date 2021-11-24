@@ -40,33 +40,6 @@ with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-# Data
-# print('==> Preparing data..')
-# transform_train = transforms.Compose([
-#     transforms.RandomHorizontalFlip(),
-#     transforms.RandomCrop(32, padding=4),
-#     transforms.ToTensor(),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-#
-# transform_test = transforms.Compose([
-#     transforms.ToTensor(),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
-#
-# dataset_train = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
-#                                              train=True, download=True,
-#                                              transform=transform_train)
-#
-# dataset_test = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
-#                                             train=False, download=True,
-#                                             transform=transform_test)
-
-
-# dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
-#                                                       dataset_test,
-#                                                       args.num_users,
-#                                                       args.n_class)
-
 def random_seed(seed):
     random.seed(seed)
     torch.manual_seed(seed)

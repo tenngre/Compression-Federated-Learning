@@ -97,6 +97,7 @@ class Client(object):
 
 def test(model, data_test, config):
     model.eval()
+    loss_func = nn.CrossEntropyLoss()
 
     meters = defaultdict(AverageMeter)
     total_timer = Timer()
@@ -115,11 +116,12 @@ def test(model, data_test, config):
 
         with torch.no_grad():
             data = data.to(config['device'])
-            labels = labels.float().to(config['device'])
+            labels = labels.type(torch.LongTensor).to(config['device'])
             log_probs = model(data)
 
             # sum up batch loss
-            testing_loss += F.cross_entropy(log_probs, labels, reduction='sum')
+            testing_loss += loss_func(log_probs, labels)
+                # F.cross_entropy(log_probs, labels, reduction='sum')
             # get the index of the max log-probability
             y_pred = log_probs.data.max(1, keepdim=True)[1]
             correct += y_pred.eq(labels.data.view_as(y_pred)).long().cpu().sum()
