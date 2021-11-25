@@ -1,5 +1,4 @@
 import configs
-from scripts.tools_noniid import *
 import json
 import os
 import argparse
@@ -19,7 +18,7 @@ parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--split', default='user')
 parser.add_argument('--local_ep', default=1, type=int)
-parser.add_argument('--dataset', default='cifar10', type=str)
+parser.add_argument('--dataset', default='mnist', type=str)
 parser.add_argument('--bs', default=256, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
@@ -56,9 +55,9 @@ config = {
     # dataset
     'dataset': args.dataset,
     'dataset_kwargs': {
-        'resize': 256 if args.dataset in ['nuswide'] else 32,
-        'crop': 32,
-        'norm': 2,
+        'resize': 256 if args.dataset in ['nuswide'] else 0,
+        'crop': 0,
+        'norm': 3,  # for mnist only
         'evaluation_protocol': 2,  # only affect cifar10
         'reset': True,
         'separate_multiclass': False,

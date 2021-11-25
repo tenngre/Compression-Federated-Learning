@@ -359,6 +359,16 @@ def main_tnt_upload(config):
 
 
 def main_norm_upload(config):
+    logdir = config['logdir']
+    assert logdir != '', 'please input logdir'
+
+    pprint(config)
+
+    os.makedirs(f'{logdir}/models', exist_ok=True)
+    os.makedirs(f'{logdir}/optims', exist_ok=True)
+    os.makedirs(f'{logdir}/outputs', exist_ok=True)
+    json.dump(config, open(f'{logdir}/config.json', 'w+'), indent=4, sort_keys=True)
+
     aggregator = Aggregator(config)
     print('==> Building model..')
     inited_mode = aggregator.inited_model()

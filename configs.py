@@ -27,7 +27,8 @@ def nclass(config):
         'imagenet100': 100,
         'cifar10': 10,
         'nuswide': 21,
-        'coco': 80
+        'coco': 80,
+        'mnist': 10
     }[config['dataset']]
 
     return r
@@ -106,7 +107,8 @@ def compose_transform(mode='train', resize=0, crop=0, norm=0,
     mean, std = {
         0: [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]],
         1: [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],
-        2: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
+        2: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]],
+        3: [[0.1307], [0.3081]]
     }[norm]
 
     compose = []
@@ -168,6 +170,24 @@ def dataset(config, filename, transform_mode):
             'coco': datasets.coco
         }[dataset_name]
         d = datafunc(transform=transform, filename=filename)
+
+    elif dataset_name in ['mnist']:
+        resizec = 0 if resize == 32 else resize
+        cropc = 0 if crop == 32 else crop
+
+        if transform_mode == 'train':
+            transform = compose_transform('train', resizec, 0, norm, [
+                transforms.RandomHorizontalFlip()
+            ])
+        else:
+            transform = compose_transform('test', resizec, cropc, norm)
+        ep = config['dataset_kwargs'].get('evaluation_protocol', 1)
+        d = datasets.mnist_iid(nclass,
+                               transform=transform,
+                               filename=filename,
+                               evaluation_protocol=ep,
+                               num_users=config['client_num'],
+                               reset=reset)
 
     else:  # cifar10/ cifar100
         resizec = 0 if resize == 32 else resize

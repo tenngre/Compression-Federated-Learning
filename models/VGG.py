@@ -58,7 +58,7 @@ class VGG_norm(nn.Module):
         super(VGG_norm, self).__init__()
         
         self.feature_extractor = nn.Sequential(            
-            nn.Conv2d(in_channels=3, out_channels=128, kernel_size=3, stride=1),
+            nn.Conv2d(in_channels=1, out_channels=128, kernel_size=3, stride=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1),
@@ -76,7 +76,7 @@ class VGG_norm(nn.Module):
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(in_features=6400, out_features=1024),
+            nn.Linear(in_features=4096, out_features=1024),
             nn.ReLU(),
             nn.Linear(in_features=1024, out_features=nclass),
         )
