@@ -5,19 +5,20 @@ import argparse
 import random
 import numpy as np
 from scripts import training
+import torch
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
 parser.add_argument('--his', default='testing', type=str)
 parser.add_argument('--num_users', default=10, type=int, )
-parser.add_argument('--epochs', default=100, help='epoch', type=int)
+parser.add_argument('--epochs', default=1, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
 parser.add_argument('--local_bs', default=128, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--split', default='user')
-parser.add_argument('--local_ep', default=1, type=int)
+parser.add_argument('--local_ep', default=2, type=int)
 parser.add_argument('--dataset', default='mnist', type=str)
 parser.add_argument('--bs', default=256, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
@@ -65,6 +66,8 @@ config = {
 
     # FL global items
     'epochs': args.epochs,
+    'save_interval': 0,
+    'eval_interval': 10,
     'bs': args.bs,
     'train_set': 0,
     'test_set': 0,

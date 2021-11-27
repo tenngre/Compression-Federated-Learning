@@ -2,41 +2,42 @@ import copy
 import json
 import time
 from collections import defaultdict
+from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader
 import os
 
 from scripts import DatasetSplit, zero_rates, ternary_convert, current_learning_rate, rec_w
-# from tnt_fl_train_noniid import dataset_test
 import logging
 import torch.nn as nn
 import numpy as np
 
-from utils.datasets import cifar_iid
 from utils.misc import AverageMeter, Timer
-import torch.nn.functional as F
 from pprint import pprint
 from configs import *
 import configs
+import io
 
-train_acc, train_loss = [], []
-test_acc, test_loss = [], []
-train_time = []
-comp_rate = []
-update_zero_rate = []
+
+# train_acc, train_loss = [], []
+# test_acc, test_loss = [], []
+# train_time = []
+# comp_rate = []
+# update_zero_rate = []
 
 
 class Client(object):
-    def __init__(self, config, dataset=None, client=None):
+    def __init__(self, config, dataset=None, model=None, client_idx=None):
         self.loss_func = nn.CrossEntropyLoss()
-        # self.selected_clients = []
-        self.ldr_train = dataloader(dataset, config['local_bs'])
-        self.client = client
+        self.model = model
+        self.local_train_dataset = dataloader(dataset, config['local_bs'])
+        self.client_idx = client_idx
         self.device = config['device']
         self.ternary_convert = config['tnt_upload']
 
-    def train(self, config, net):
+    def train(self, config):
+        net = self.model
         net.train()
         optimizer = configs.optimizer(config, net.parameters())
 
@@ -44,14 +45,15 @@ class Client(object):
         timer = Timer()
 
         total_timer.tick()
-        epoch_res = []
-
-        logging.info(f'Client {self.client} is training on GPU {self.device}.')
+        client_batch = []
+        logging.info(f'Client {self.client_idx} is training on GPU {self.device}.')
+        client_meters = defaultdict(AverageMeter)
+        client_ep = {}
         for ep in range(config['local_ep']):
             meters = defaultdict(AverageMeter)
             res = {'ep': ep + 1}
             correct = 0
-            for batch_idx, (images, labels) in enumerate(self.ldr_train):
+            for batch_idx, (images, labels) in enumerate(self.local_train_dataset):
                 timer.tick()
 
                 images = images.to(config['device'])
@@ -67,31 +69,38 @@ class Client(object):
                 pre_labels = prob.data.max(1, keepdim=True)[1]
 
                 correct += pre_labels.eq(labels.data.view_as(pre_labels)).long().cpu().sum()
-                training_acc = correct.item() / len(self.ldr_train.dataset)
-
+                training_acc = correct.item() / len(self.local_train_dataset.dataset)
                 timer.toc()
-                total_timer.toc()
 
                 # store results
                 meters['loss_total'].update(loss.item(), images.size(0))
                 meters['acc'].update(training_acc, images.size(0))
                 meters['time'].update(timer.total)
 
-                print(f'Train [{batch_idx + 1}/{len(self.ldr_train)}] '
+                print(f'Epoch {ep} Client {self.client_idx} '
+                      f'Train [{batch_idx + 1}/{len(self.local_train_dataset)}] '
                       f'Total Loss: {meters["loss_total"].avg:.4f} '
                       f'A(CE): {meters["acc"].avg:.2%} '
                       f'({timer.total:.2f}s / {total_timer.total:.2f}s)', end='\r')
 
-            for key in meters: res['train_' + key] = meters[key].avg
+            total_timer.toc()
+            meters['total_time'].update(total_timer.total)
 
-            epoch_res.append(res)
+            for key in meters: res['train_' + key] = meters[key].avg
+            client_batch.append(res)
+
+        for item in client_batch:
+            for key in item.keys():
+                client_meters[str(self.client_idx) + '_' + key].update(item[key])
+        for key in client_meters:
+            client_ep[key] = client_meters[key].avg
 
         if config['tnt_upload']:
             w_tnt, local_error = ternary_convert(copy.deepcopy(net))  # transmit tnt error
-            return w_tnt, local_error, epoch_res
+            return w_tnt, local_error, client_ep
 
         else:
-            return net.state_dict(), epoch_res
+            return net.state_dict(), client_ep
 
 
 def test(model, data_test, config):
@@ -184,8 +193,7 @@ class Aggregator(object):
         self.zero_rate = False
 
     def inited_model(self):
-        model = self.model
-        return model
+        return self.model
 
     def client_model(self, model):
         cli_model = {}
@@ -193,7 +201,7 @@ class Aggregator(object):
             cli_model[str(idx)] = copy.deepcopy(model)
         return cli_model
 
-    def params_aggregate(self, parma_dict):
+    def params_aggregation(self, parma_dict):
         w = list(parma_dict.values())
         w_avg = copy.deepcopy(w[0])
 
@@ -202,17 +210,7 @@ class Aggregator(object):
                 w_avg[k] += w[i][k]
             w_avg[k] = torch.div(w_avg[k], float(len(w)))
 
-        if self.zero_rate:
-            total_params = 0
-            zero_params = 0
-            for key in w_avg.keys():
-                zero_params += (w_avg[key].view(-1) == 0).sum().item()
-                total_params += len(w_avg[key].view(-1))
-
-            return w_avg, (zero_params / total_params)
-
-        else:
-            return w_avg
+        return w_avg
 
 
 def prepare_dataset(config):
@@ -225,7 +223,7 @@ def prepare_dataset(config):
     return train_dataset, test_dataset
 
 
-def clients_group(config):
+def clients_group(config, model):
     m = max(int(config['client_frac'] * config['client_num']), 1)
     users_index = np.random.choice(range(config['client_num']), m, replace=False)
 
@@ -239,10 +237,15 @@ def clients_group(config):
     for idx in users_index:
         client = Client(config=config,
                         dataset=train_dataset[idx],
-                        client=idx)
+                        model=copy.deepcopy(model),
+                        client_idx=idx)
         client_group[idx] = client
 
     return client_group
+
+
+def average(lst):
+    return sum(lst) / len(lst)
 
 
 def main_tnt_upload(config):
@@ -371,88 +374,106 @@ def main_norm_upload(config):
 
     aggregator = Aggregator(config)
     print('==> Building model..')
-    inited_mode = aggregator.inited_model()
-    print(inited_mode)
+    inited_model = aggregator.inited_model()
+    print(inited_model)
 
     print('Init Clients')
-    client_group = clients_group(config)
+    client_group = clients_group(config, inited_model)
 
-    print('Deliver model to clients')
-    client_net = aggregator.client_model(inited_mode)
+    round_train_acc = []
+    round_train_loss = []
+    round_test_acc = []
+    round_test_loss = []
+    round_time = []
+    train_history = []
+    test_history = []
 
-    best_acc = 0
-    current_lr = config['current_lr']
+    nepochs = config['epochs']
+    neval = config['eval_interval']
+
+    best = 0
+    curr_metric = 0
 
     for epoch in range(config['epochs']):
         start_time = time.time()
         client_upload = {}
-        acc_locals_train = {}
-        loss_locals_train = []
-        local_zero_rates = []
+        train_acc_total = []
+        train_loss_total = []
 
         print(f'\n | Global Training Round: {epoch} Training {config["history"]}|\n')
 
         # training
         for idx in client_group.keys():
-            w_, res = client_group[idx].train(config,
-                                              net=client_net[str(idx)].to(config['device']))
-            client_upload[str(idx)] = copy.deepcopy(w_)
+            w_, client_ep = client_group[idx].train(config)
+            client_upload[idx] = copy.deepcopy(w_)
+
+            train_history.append(client_ep)
 
             # recording local training info
-            acc_locals_train[str(idx)] = copy.deepcopy(res[-1]['train_acc'])
-            loss_locals_train.append(copy.deepcopy(res[-1]['train_loss_total']))
+            train_acc_total.append(client_ep[str(idx) + '_train_acc'])
+            train_loss_total.append(client_ep[str(idx) + '_train_loss_total'])
 
-        elapsed = time.time() - start_time
-        train_time.append(elapsed)
+        round_train_acc.append(average(train_acc_total))
+        round_train_loss.append(average(train_loss_total))
+
+        json.dump(train_history, open(f'{logdir}/train_history.json', 'w+'), indent=True, sort_keys=True)
 
         # aggregation in server
-        glob_avg = aggregator.params_aggregate(copy.deepcopy(client_upload))
+        glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))
+        inited_model.load_state_dict(glob_avg)
 
         # update local models
-
         for idx in client_group.keys():
-            client_net[str(idx)].load_state_dict(glob_avg)
+            client_group[idx].model.load_state_dict(glob_avg)
 
         # ====model testing===
 
+        # eval_now = (epoch + 1) == nepochs or (neval != 0 and (ep + 1) % neval == 0)
+        # if eval_now:
         print(f'\n |Round {epoch} Global Test {config["history"]}|\n')
-        testing_res = test(model=client_net[str(0)],
+        testing_res = test(model=inited_model,
                            data_test=config['test_set'],
                            config=config)
 
-        test_acc.append(testing_res['testing_acc'])
-        test_loss.append(testing_res['testing_loss_total'])
+        curr_metric = testing_res['testing_acc']
 
-        # training info update
-        avg_acc_train = sum(acc_locals_train.values()) / len(acc_locals_train.values())
+        round_test_acc.append(testing_res['testing_acc'])
+        round_test_loss.append(testing_res['testing_loss_total'])
 
-        train_acc.append(avg_acc_train)
 
-        loss_avg = sum(loss_locals_train) / len(loss_locals_train)
-        train_loss.append(loss_avg)
-        try:
-            temp_zero_rates = sum(local_zero_rates) / len(local_zero_rates)
+        test_history.append(testing_res)
 
-        except:
-            temp_zero_rates = sum(local_zero_rates)
-        update_zero_rate.append(temp_zero_rates)
+        if len(test_history) != 0:
+            json.dump(test_history, open(f'{logdir}/test_history.json', 'w+'), indent=True, sort_keys=True)
 
-        print(f'Round {epoch} costs time: {elapsed:.2f}s| Train Acc.: {avg_acc_train:.2%}| '
-              f'Test Acc.{test_acc[-1].avg:.2%}| Train loss: {loss_avg:.4f}| Test loss: {test_loss[-1].avg:.4f}| '
-              f'| Up Rate{temp_zero_rates:.3%}')
+        elapsed = time.time() - start_time
+        round_time.append(elapsed)
 
-        # current_lr = current_learning_rate(epoch, current_lr, config)
+        print(f'Round {epoch} costs time: {elapsed:.2f}s|'
+              f'Train Acc.: {round_train_acc[-1]:.2%}| Test Acc.{round_test_acc[-1].avg:.2%}| '
+              f'Train loss: {round_train_loss[-1]:.4f}| Test loss: {round_test_loss[-1].avg:.4f}| ')
 
-    his_dict = {
-        'train_loss': train_loss,
-        'train_accuracy': train_acc,
-        'test_loss': test_loss,
-        'test_correct': test_acc,
-        'train_time': train_time,
-        'glob_zero_rates': comp_rate,
-        'local_zero_rates': update_zero_rate,
-    }
+        modelsd = inited_model.state_dict()
+        # optimsd = optimizer.state_dict()
+        # io.fast_save(modelsd, f'{logdir}/models/last.pth')
+        # io.fast_save(optimsd, f'{logdir}/optims/last.pth')
+        save_now = config['save_interval'] != 0 and (epoch + 1) % config['save_interval'] == 0
+        if save_now:
+            io.fast_save(modelsd, f'{logdir}/models/ep{epoch + 1}.pth')
+            # io.fast_save(optimsd, f'{logdir}/optims/ep{ep + 1}.pth')
+            # io.fast_save(train_outputs, f'{logdir}/outputs/train_ep{ep + 1}.pth')
 
-    os.makedirs('./his/', exist_ok=True)
-    with open('./his/{}.json'.format(config["history"]), 'w+') as f:
-        json.dump(his_dict, f, indent=2)
+        if best < curr_metric:
+            best = curr_metric
+            io.fast_save(modelsd, f'{logdir}/models/best.pth')
+
+    modelsd = inited_model.state_dict()
+    io.fast_save(modelsd, f'{logdir}/models/last.pth')
+    total_time = time.time() - start_time
+    io.join_save_queue()
+    logging.info(f'Training End at {datetime.today().strftime("%Y-%m-%d %H:%M:%S")}')
+    logging.info(f'Total time used: {total_time / (60 * 60):.2f} hours')
+    logging.info(f'Best mAP: {best:.6f}')
+    logging.info(f'Done: {logdir}')
+
+
