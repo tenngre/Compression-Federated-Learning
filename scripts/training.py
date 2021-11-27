@@ -5,26 +5,16 @@ from collections import defaultdict
 from datetime import datetime
 
 import torch
-from torch.utils.data import DataLoader
 import os
-
-from scripts import DatasetSplit, zero_rates, ternary_convert, current_learning_rate, rec_w
+from scripts import ternary_convert, rec_w, zero_rates
 import logging
 import torch.nn as nn
 import numpy as np
-
 from utils.misc import AverageMeter, Timer
 from pprint import pprint
 from configs import *
 import configs
-import io
-
-
-# train_acc, train_loss = [], []
-# test_acc, test_loss = [], []
-# train_time = []
-# comp_rate = []
-# update_zero_rate = []
+from utils import io
 
 
 class Client(object):
@@ -33,22 +23,24 @@ class Client(object):
         self.model = model
         self.local_train_dataset = dataloader(dataset, config['local_bs'])
         self.client_idx = client_idx
-        self.device = config['device']
-        self.ternary_convert = config['tnt_upload']
+        self.optimizer = configs.optimizer(config, self.model.parameters())
+        self.scheduler = configs.scheduler(config, self.optimizer)
 
-    def train(self, config):
+    def train(self, config, r):
         net = self.model
         net.train()
-        optimizer = configs.optimizer(config, net.parameters())
-
         total_timer = Timer()
         timer = Timer()
 
         total_timer.tick()
         client_batch = []
-        logging.info(f'Client {self.client_idx} is training on GPU {self.device}.')
+        logging.info(f'Client {self.client_idx} is training on GPU {config["device"]}.')
         client_meters = defaultdict(AverageMeter)
         client_ep = {}
+
+        if r != 0 and r % config['weights_decay_inter'] == 0:
+            self.scheduler.step()
+
         for ep in range(config['local_ep']):
             meters = defaultdict(AverageMeter)
             res = {'ep': ep + 1}
@@ -64,12 +56,13 @@ class Client(object):
                 prob = net(images)
                 loss = self.loss_func(prob, labels)
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
 
                 pre_labels = prob.data.max(1, keepdim=True)[1]
 
                 correct += pre_labels.eq(labels.data.view_as(pre_labels)).long().cpu().sum()
                 training_acc = correct.item() / len(self.local_train_dataset.dataset)
+
                 timer.toc()
 
                 # store results
@@ -103,7 +96,7 @@ class Client(object):
             return net.state_dict(), client_ep
 
 
-def test(model, data_test, config):
+def test(model, config):
     model.eval()
     loss_func = nn.CrossEntropyLoss()
 
@@ -115,74 +108,39 @@ def test(model, data_test, config):
     # testing
     testing_loss = 0
     correct = 0
-    total = 0
-    data_loader = DataLoader(data_test, batch_size=config['bs'])
+    data_loader = configs.dataloader(config['test_set'], config['bs'], shuffle=False, drop_last=False)
+    # data_loader = DataLoader(data_test, batch_size=config['bs'])
 
     logging.info(f'Testing on GPU {config["device"]}.')
-    for i, (data, labels) in enumerate(data_loader):
-        timer.tick()
 
-        with torch.no_grad():
+    with torch.no_grad():
+        for i, (data, labels) in enumerate(data_loader):
+            timer.tick()
             data = data.to(config['device'])
             labels = labels.type(torch.LongTensor).to(config['device'])
             log_probs = model(data)
 
             # sum up batch loss
-            testing_loss += loss_func(log_probs, labels)
-            # F.cross_entropy(log_probs, labels, reduction='sum')
+            testing_loss += loss_func(log_probs, labels).item()
             # get the index of the max log-probability
             y_pred = log_probs.data.max(1, keepdim=True)[1]
             correct += y_pred.eq(labels.data.view_as(y_pred)).long().cpu().sum()
-            total += labels.size(0)
-        timer.toc()
-        total_timer.toc()
+            timer.toc()
+            total_timer.toc()
 
-        acc = correct.item() / len(data_loader.dataset)
+            acc = correct.item() / len(data_loader.dataset)
 
-        # store results
-        meters['testing_loss_total'].update(testing_loss, data.size(0))
-        meters['testing_acc'].update(acc, data.size(0))
-        meters['time'].update(timer.total)
+            # store results
+            meters['testing_loss_total'].update(testing_loss, data.size(0))
+            meters['testing_acc'].update(acc, data.size(0))
+            meters['time'].update(timer.total)
 
-        print(f'Test [{i + 1}/{len(data_loader)}] '
-              f'T(loss): {meters["testing_loss_total"].avg:.4f} '
-              f'A(CE): {meters["testing_acc"].avg:.2%} '
-              f'({timer.total:.2f}s / {total_timer.total:.2f}s)', end='\r')
-
+            print(f'Test [{i + 1}/{len(data_loader)}] '
+                  f'T(loss): {meters["testing_loss_total"].avg:.4f} '
+                  f'A(CE): {meters["testing_acc"].avg:.2%} '
+                  f'({timer.total:.2f}s / {total_timer.total:.2f}s)', end='\r')
+    meters['time'].update(total_timer.total)
     return meters
-
-    # # saving best
-    # if acc > best_acc:
-    #     print('Saving..')
-    #     state = {
-    #         # 'net': net_g.get_tnt(),  # net_g.get_tnt(),  # 'net':net.get_tnt() for tnt network // net.state_dict()
-    #         'net': net_g.get_tnt() if config['tnt_upload'] else net_g.state_dict(),
-    #         # net_g.get_tnt(),  # 'net':net.get_tnt() for tnt network // net.state_dict()
-    #         'acc': acc * 100.,
-    #         'epoch': epoch,
-    #     }
-    #     if not os.path.isdir('checkpoint'):
-    #         os.mkdir('checkpoint')
-    #     torch.save(state, './checkpoint/{}.ckpt'.format(config['history']))
-    #     best_acc = acc
-    #
-    # if config['save']:
-    #     dict_name = config['history'].split('.')[0]
-    #     path = os.path.join('./saved/', '{}/epoch_{}_{}.ckpt'.format(dict_name, epoch, config['history']))
-    #     if epoch % 10 == 0:
-    #         print('Saving..')
-    #         state = {
-    #             # 'net': net_g.get_tnt(),
-    #             'net': net_g.get_tnt() if config['tnt_upload'] else net_g.state_dict(),
-    #             # net_g.get_tnt(),  # 'net':net.get_tnt() for tnt network // net.state_dict()
-    #             'acc': acc * 100.,
-    #             'epoch': epoch,
-    #         }
-    #         if not os.path.isdir('./saved/{}'.format(dict_name)):
-    #             os.makedirs('./saved/{}'.format(dict_name))
-    #         torch.save(state, path)
-    #         best_acc = acc
-    # return acc, test_loss, best_acc
 
 
 class Aggregator(object):
@@ -246,7 +204,6 @@ def clients_group(config, model):
 
 def average(lst):
     return sum(lst) / len(lst)
-
 
 def main_tnt_upload(config):
     logdir = config['logdir']
@@ -400,11 +357,11 @@ def main_norm_upload(config):
         train_acc_total = []
         train_loss_total = []
 
-        print(f'\n | Global Training Round: {epoch} Training {config["history"]}|\n')
+        print(f'\n | Global Training Round: {epoch} Training|\n')
 
         # training
         for idx in client_group.keys():
-            w_, client_ep = client_group[idx].train(config)
+            w_, client_ep = client_group[idx].train(config, epoch)
             client_upload[idx] = copy.deepcopy(w_)
 
             train_history.append(client_ep)
@@ -430,18 +387,19 @@ def main_norm_upload(config):
 
         # eval_now = (epoch + 1) == nepochs or (neval != 0 and (ep + 1) % neval == 0)
         # if eval_now:
-        print(f'\n |Round {epoch} Global Test {config["history"]}|\n')
+        print(f'\n |Round {epoch} Global Test|\n')
         testing_res = test(model=inited_model,
-                           data_test=config['test_set'],
                            config=config)
 
-        curr_metric = testing_res['testing_acc']
+        temp_res = {}
+        for key in testing_res.keys():
+            temp_res[key] = testing_res[key].avg
+        test_history.append(temp_res)
 
-        round_test_acc.append(testing_res['testing_acc'])
-        round_test_loss.append(testing_res['testing_loss_total'])
+        curr_metric = testing_res['testing_acc'].avg
 
-
-        test_history.append(testing_res)
+        round_test_acc.append(testing_res['testing_acc'].avg)
+        round_test_loss.append(testing_res['testing_loss_total'].avg)
 
         if len(test_history) != 0:
             json.dump(test_history, open(f'{logdir}/test_history.json', 'w+'), indent=True, sort_keys=True)
@@ -450,8 +408,8 @@ def main_norm_upload(config):
         round_time.append(elapsed)
 
         print(f'Round {epoch} costs time: {elapsed:.2f}s|'
-              f'Train Acc.: {round_train_acc[-1]:.2%}| Test Acc.{round_test_acc[-1].avg:.2%}| '
-              f'Train loss: {round_train_loss[-1]:.4f}| Test loss: {round_test_loss[-1].avg:.4f}| ')
+              f'Train Acc.: {round_train_acc[-1]:.2%}| Test Acc.{round_test_acc[-1]:.2%}| '
+              f'Train loss: {round_train_loss[-1]:.4f}| Test loss: {round_test_loss[-1]:.4f}| ')
 
         modelsd = inited_model.state_dict()
         # optimsd = optimizer.state_dict()
@@ -465,15 +423,14 @@ def main_norm_upload(config):
 
         if best < curr_metric:
             best = curr_metric
-            io.fast_save(modelsd, f'{logdir}/models/best.pth')
+            torch.save(modelsd, f'{logdir}/models/best.pth')
+            # io.fast_save(modelsd, f'{logdir}/models/best.pth')
 
     modelsd = inited_model.state_dict()
-    io.fast_save(modelsd, f'{logdir}/models/last.pth')
+    torch.save(modelsd, f'{logdir}/models/last.pth')
     total_time = time.time() - start_time
-    io.join_save_queue()
+    # io.join_save_queue()
     logging.info(f'Training End at {datetime.today().strftime("%Y-%m-%d %H:%M:%S")}')
     logging.info(f'Total time used: {total_time / (60 * 60):.2f} hours')
     logging.info(f'Best mAP: {best:.6f}')
     logging.info(f'Done: {logdir}')
-
-

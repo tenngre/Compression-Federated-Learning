@@ -9,16 +9,15 @@ import torch
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
-parser.add_argument('--his', default='testing', type=str)
 parser.add_argument('--num_users', default=10, type=int, )
-parser.add_argument('--epochs', default=1, help='epoch', type=int)
+parser.add_argument('--epochs', default=2, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
 parser.add_argument('--local_bs', default=128, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--split', default='user')
-parser.add_argument('--local_ep', default=2, type=int)
+parser.add_argument('--local_ep', default=1, type=int)
 parser.add_argument('--dataset', default='mnist', type=str)
 parser.add_argument('--bs', default=256, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
@@ -33,10 +32,6 @@ parser.add_argument('--g_c', default=200, type=int, help='floating model communi
 args = parser.parse_args()
 
 args_dict = vars(args)
-
-os.makedirs('./setting', exist_ok=True)
-with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
-    json.dump(args_dict, f)
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -83,6 +78,14 @@ config = {
     'local_ep': args.local_ep,
     'd_epoch': args.d_epoch,
 
+    'weights_decay_inter': 1,
+    'scheduler': 'step',
+    'scheduler_kwargs': {
+        'step_size': int(args.epochs * 0.8),
+        'gamma': 0.1,
+        'milestones': '0.5,0.75'
+    },
+
     'optima': 'adam',
     'optima_kwargs': {
         'lr': args.lr,
@@ -104,7 +107,6 @@ config = {
         # 'freeze_weight': False,
     },
     'log_dir': 'results',
-    'history': args.his,
     'save': args.save,
     'tag': 'TNT'
 }

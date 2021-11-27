@@ -1,10 +1,6 @@
 import os
-import random
-
-import numpy as np
-import torch
 from torch.optim import SGD, Adam, lr_scheduler
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torchvision import transforms
 
 import models
