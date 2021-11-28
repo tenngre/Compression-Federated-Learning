@@ -1,5 +1,4 @@
 import configs
-import json
 import os
 import argparse
 import random
@@ -10,9 +9,9 @@ import torch
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
 parser.add_argument('--num_users', default=10, type=int, )
-parser.add_argument('--epochs', default=2, help='epoch', type=int)
+parser.add_argument('--epochs', default=100, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
-parser.add_argument('--local_bs', default=128, type=int)
+parser.add_argument('--local_bs', default=10, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
@@ -78,7 +77,7 @@ config = {
     'local_ep': args.local_ep,
     'd_epoch': args.d_epoch,
 
-    'weights_decay_inter': 1,
+    'weights_decay_inter': 30,
     'scheduler': 'step',
     'scheduler_kwargs': {
         'step_size': int(args.epochs * 0.8),

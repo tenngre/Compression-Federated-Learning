@@ -186,7 +186,6 @@ def clients_group(config, model):
     users_index = np.random.choice(range(config['client_num']), m, replace=False)
 
     train_dataset, test_dataset = prepare_dataset(config)
-    print(len(test_dataset.targets))
 
     config['train_set'] = train_dataset
     config['test_set'] = test_dataset
@@ -204,6 +203,7 @@ def clients_group(config, model):
 
 def average(lst):
     return sum(lst) / len(lst)
+
 
 def main_tnt_upload(config):
     logdir = config['logdir']
@@ -337,10 +337,8 @@ def main_norm_upload(config):
     print('Init Clients')
     client_group = clients_group(config, inited_model)
 
-    round_train_acc = []
-    round_train_loss = []
-    round_test_acc = []
-    round_test_loss = []
+    round_train = {}
+    round_test = {}
     round_time = []
     train_history = []
     test_history = []
@@ -370,10 +368,11 @@ def main_norm_upload(config):
             train_acc_total.append(client_ep[str(idx) + '_train_acc'])
             train_loss_total.append(client_ep[str(idx) + '_train_loss_total'])
 
-        round_train_acc.append(average(train_acc_total))
-        round_train_loss.append(average(train_loss_total))
+        round_train[f'Round_{epoch}_acc'] = average(train_acc_total)
+        round_train[f'Round_{epoch}_loss'] = average(train_loss_total)
 
         json.dump(train_history, open(f'{logdir}/train_history.json', 'w+'), indent=True, sort_keys=True)
+        json.dump(round_train, open(f'{logdir}/train_round_history.json', 'w+'), indent=True, sort_keys=True)
 
         # aggregation in server
         glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))
@@ -398,18 +397,21 @@ def main_norm_upload(config):
 
         curr_metric = testing_res['testing_acc'].avg
 
-        round_test_acc.append(testing_res['testing_acc'].avg)
-        round_test_loss.append(testing_res['testing_loss_total'].avg)
+        round_train[f'Round_{epoch}_acc'] = testing_res['testing_acc'].avg
+        round_test[f'Round_{epoch}_test_loos'] = testing_res['testing_loss_total'].avg
 
         if len(test_history) != 0:
             json.dump(test_history, open(f'{logdir}/test_history.json', 'w+'), indent=True, sort_keys=True)
+            json.dump(round_test, open(f'{logdir}/test_round_history.json', 'w+'), indent=True, sort_keys=True)
 
         elapsed = time.time() - start_time
         round_time.append(elapsed)
 
         print(f'Round {epoch} costs time: {elapsed:.2f}s|'
-              f'Train Acc.: {round_train_acc[-1]:.2%}| Test Acc.{round_test_acc[-1]:.2%}| '
-              f'Train loss: {round_train_loss[-1]:.4f}| Test loss: {round_test_loss[-1]:.4f}| ')
+              f'Train Acc.: {round_train[f"Round_{epoch}_acc"]:.2%}| '
+              f'Test Acc.{round_train[f"Round_{epoch}_acc"]:.2%}| '
+              f'Train loss: {round_train[f"Round_{epoch}_loss"]:.4f}| '
+              f'Test loss: {round_test[f"Round_{epoch}_test_loos"]:.4f}| ')
 
         modelsd = inited_model.state_dict()
         # optimsd = optimizer.state_dict()
