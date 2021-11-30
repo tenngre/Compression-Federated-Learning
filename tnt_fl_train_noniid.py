@@ -8,10 +8,10 @@ import torch
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
-parser.add_argument('--num_users', default=10, type=int, )
+parser.add_argument('--num_users', default=1, type=int, )
 parser.add_argument('--epochs', default=100, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
-parser.add_argument('--local_bs', default=10, type=int)
+parser.add_argument('--local_bs', default=128, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
@@ -25,7 +25,7 @@ parser.add_argument('--tnt_upload', action='store_true', help='uploading tnt wei
 parser.add_argument('--weight_decay', default=0.0001, type=float)
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--seed', default=80, type=int)
-parser.add_argument('--model', default='vgg_norm', type=str)
+parser.add_argument('--model', default='net', type=str)
 parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
 args = parser.parse_args()
@@ -33,6 +33,7 @@ args = parser.parse_args()
 args_dict = vars(args)
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
 
 def random_seed(seed):
     random.seed(seed)
@@ -62,7 +63,7 @@ config = {
     'epochs': args.epochs,
     'save_interval': 0,
     'eval_interval': 10,
-    'bs': args.bs,
+    'bs': args.bs,  # for testing
     'train_set': 0,
     'test_set': 0,
     'current_lr': args.lr,
@@ -92,12 +93,6 @@ config = {
         'weight_decay': 0.0005,
         'nesterov': False,
         'betas': (0.9, 0.999)
-    },
-    'scheduler': 'step',
-    'scheduler_kwargs': {
-        'step_size': int(args.epochs * 0.8),
-        'gamma': 0.1,
-        'milestones': '0.5,0.75'
     },
     'model_name': args.model,
     'arch_kwargs': {
