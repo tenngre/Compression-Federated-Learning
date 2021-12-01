@@ -44,7 +44,6 @@ class Client(object):
         for ep in range(config['local_ep']):
             meters = defaultdict(AverageMeter)
             res = {'ep': ep + 1}
-            correct = 0
             for batch_idx, (images, labels) in enumerate(self.local_train_dataset):
                 timer.tick()
 
@@ -85,7 +84,7 @@ class Client(object):
 
         for item in client_batch:
             for key in item.keys():
-                client_meters[str(self.client_idx) + '_' + key].update(item[key])
+                client_meters[f'Round_{r}_' + str(self.client_idx) + '_' + key].update(item[key])
         for key in client_meters:
             client_ep[key] = client_meters[key].avg
 
@@ -108,7 +107,6 @@ def test(model, config):
 
     # testing
     testing_loss = 0
-    correct = 0
     data_loader = configs.dataloader(config['test_set'], config['bs'], shuffle=False, drop_last=False)
     # data_loader = DataLoader(data_test, batch_size=config['bs'])
 
@@ -129,8 +127,6 @@ def test(model, config):
             correct = ((y_pred.eq(labels.data.view_as(y_pred)).long() * 1.0).cpu().mean()).item()
             timer.toc()
             total_timer.toc()
-
-            # acc = correct.item() / len(data_loader.dataset)
 
             # store results
             meters['testing_loss_total'].update(testing_loss, data.size(0))
@@ -246,8 +242,9 @@ def main_tnt_upload(config):
     round_train = {}
     round_test = {}
     round_time = []
+
     train_history = []
-    test_history = []
+    test_history = {}
 
     nepochs = config['epochs']
     neval = config['eval_interval']
@@ -268,8 +265,8 @@ def main_tnt_upload(config):
         # training
         for idx in client_group.keys():
             ter_params, qua_error, client_ep = client_group[idx].train(config, epoch)
-            client_local[idx] = copy.deepcopy(qua_error)
-            client_upload[idx] = copy.deepcopy(ter_params)
+            client_local[idx] = copy.deepcopy(ter_params)
+            client_upload[idx] = copy.deepcopy(qua_error)
             z_r = zero_rates(ter_params)
             local_zero_rates.append(z_r)
             logging.info(f'Client {idx} zero rate {z_r:.2%}')
@@ -278,14 +275,16 @@ def main_tnt_upload(config):
             train_history.append(client_ep)
 
             # recording local training info
-            train_acc_total.append(client_ep[str(idx) + '_train_acc'])
-            train_loss_total.append(client_ep[str(idx) + '_train_loss_total'])
+            train_acc_total.append(client_ep[f'Round_{epoch}_' + str(idx) + '_train_acc'])
+            train_loss_total.append(client_ep[f'Round_{epoch}_' + str(idx) + '_train_loss_total'])
 
         round_train[f'{epoch}_Round_train_acc'] = average(train_acc_total)
         round_train[f'{epoch}_Round_train_lose'] = average(train_loss_total)
 
-        elapsed = time.time() - start_time
-        # train_time.append(elapsed)
+        json.dump(train_history, open(f'{logdir}/train_history.json', 'w+'), indent=True, sort_keys=True)
+        json.dump(round_train, open(f'{logdir}/train_round_history.json', 'w+'), indent=True, sort_keys=True)
+
+        # elapsed = time.time() - start_time
 
         # aggregation in server
         glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))
@@ -297,33 +296,38 @@ def main_tnt_upload(config):
                                             client_group[idx].model)
 
         # client testing
-        client_round_acc = []
-        client_round_loss = []
-        logging.info(f'\n |Round {epoch} Client Test |\n')
-        for idx in client_group.keys():
-            logging.info(f'Client {idx} Testing on GPU {config["device"]}.')
-            testing_res = test(model=client_group[idx].model,
-                               config=config)
+        eval_now = (epoch + 1) == nepochs or (neval != 0 and (epoch + 1) % neval == 0)
+        if eval_now:
+            client_round_acc = []
+            client_round_loss = []
+            logging.info(f'\n |Round {epoch} Client Test |\n')
+            for idx in client_group.keys():
+                logging.info(f'Client {idx} Testing on GPU {config["device"]}.')
+                testing_res = test(model=client_group[idx].model,
+                                   config=config)
+                test_history['client_' + str(idx)] = {}
+                test_history['client_' + str(idx)]['test_acc'] = testing_res['testing_acc'].avg
+                test_history['client_' + str(idx)]['test_lose'] = testing_res['testing_loss_total'].avg
 
-            client_round_acc.append(testing_res['testing_acc'].avg)
-            client_round_loss.append(testing_res['testing_loss_total'].avg)
+                client_round_acc.append(testing_res['testing_acc'].avg)
+                client_round_loss.append(testing_res['testing_loss_total'].avg)
 
-        curr_metric = average(client_round_acc)
-        round_test[f'{epoch}_Round_test_acc'] = average(client_round_acc)
-        round_test[f'{epoch}_Round_test_lose'] = average(client_round_loss)
+            curr_metric = average(client_round_acc)
+            round_test[f'{epoch}_Round_test_acc'] = average(client_round_acc)
+            round_test[f'{epoch}_Round_test_lose'] = average(client_round_loss)
 
-        if len(test_history) != 0:
-            json.dump(test_history, open(f'{logdir}/test_history.json', 'w+'), indent=True, sort_keys=True)
-            json.dump(round_test, open(f'{logdir}/test_round_history.json', 'w+'), indent=True, sort_keys=True)
+            if len(test_history) != 0:
+                json.dump(test_history, open(f'{logdir}/test_history.json', 'w+'), indent=True, sort_keys=True)
+                json.dump(round_test, open(f'{logdir}/test_round_history.json', 'w+'), indent=True, sort_keys=True)
 
-        elapsed = time.time() - start_time
-        round_time.append(elapsed)
+            elapsed = time.time() - start_time
+            round_time.append(elapsed)
 
-        print(f'Round {epoch} costs time: {elapsed:.2f}s|'
-              f'Train Acc.: {round_train[f"{epoch}_Round_train_acc"]:.2%}| '
-              f'Test Acc.{round_test[f"{epoch}_Round_test_acc"]:.2%}| '
-              f'Train loss: {round_train[f"{epoch}_Round_train_lose"]:.4f}| '
-              f'Test loss: {round_test[f"{epoch}_Round_test_lose"]:.4f}| ')
+            print(f'Round {epoch} costs time: {elapsed:.2f}s|'
+                  f'Train Acc.: {round_train[f"{epoch}_Round_train_acc"]:.2%}| '
+                  f'Test Acc.{round_test[f"{epoch}_Round_test_acc"]:.2%}| '
+                  f'Train loss: {round_train[f"{epoch}_Round_train_lose"]:.4f}| '
+                  f'Test loss: {round_test[f"{epoch}_Round_test_lose"]:.4f}| ')
 
         modelsd = inited_model.state_dict()
         # optimsd = optimizer.state_dict()
