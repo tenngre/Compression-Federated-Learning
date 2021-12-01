@@ -70,7 +70,7 @@ class Client(object):
                 meters['acc'].update(correct, images.size(0))
                 meters['time'].update(timer.total)
 
-                print(f'Epoch {ep} Client {self.client_idx} '
+                print(f'Local Epoch {ep} Client {self.client_idx} '
                       f'Train [{batch_idx + 1}/{len(self.local_train_dataset)}] '
                       f'Total Loss: {meters["loss_total"].avg:.4f} '
                       f'A(CE): {meters["acc"].avg:.2%} '
@@ -232,7 +232,7 @@ def main_tnt_upload(config):
     json.dump(config, open(f'{logdir}/config.json', 'w+'), indent=4, sort_keys=True)
 
     aggregator = Aggregator(config)
-    print('==> Building model..')
+    print('Building model..')
     inited_model = aggregator.inited_model()
     print(inited_model)
 
@@ -245,6 +245,8 @@ def main_tnt_upload(config):
 
     train_history = []
     test_history = {}
+
+    compression_rate = {}
 
     nepochs = config['epochs']
     neval = config['eval_interval']
@@ -270,21 +272,21 @@ def main_tnt_upload(config):
             z_r = zero_rates(ter_params)
             local_zero_rates.append(z_r)
             logging.info(f'Client {idx} zero rate {z_r:.2%}')
+            compression_rate[f'Round_{epoch}_Client_{idx}_compression_rate'] = z_r
 
             # recording local training info
             train_history.append(client_ep)
 
             # recording local training info
-            train_acc_total.append(client_ep[f'Round_{epoch}_' + str(idx) + '_train_acc'])
-            train_loss_total.append(client_ep[f'Round_{epoch}_' + str(idx) + '_train_loss_total'])
+            train_acc_total.append(client_ep[f'Round_{epoch}_{idx}_train_acc'])
+            train_loss_total.append(client_ep[f'Round_{epoch}_{idx}_train_loss_total'])
 
         round_train[f'{epoch}_Round_train_acc'] = average(train_acc_total)
         round_train[f'{epoch}_Round_train_lose'] = average(train_loss_total)
 
         json.dump(train_history, open(f'{logdir}/train_history.json', 'w+'), indent=True, sort_keys=True)
         json.dump(round_train, open(f'{logdir}/train_round_history.json', 'w+'), indent=True, sort_keys=True)
-
-        # elapsed = time.time() - start_time
+        json.dump(compression_rate, open(f'{logdir}/client_compression_rate.json', 'w+'), indent=True, sort_keys=True)
 
         # aggregation in server
         glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))

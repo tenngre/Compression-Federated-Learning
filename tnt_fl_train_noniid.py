@@ -62,7 +62,7 @@ config = {
     # FL global items
     'epochs': args.epochs,
     'save_interval': 0,
-    'eval_interval': 10,
+    'eval_interval': 1,
     'bs': args.bs,  # for testing
     'train_set': 0,
     'test_set': 0,
