@@ -11,7 +11,7 @@ parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
 parser.add_argument('--num_users', default=10, type=int, )
 parser.add_argument('--epochs', default=100, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
-parser.add_argument('--local_bs', default=10, type=int)
+parser.add_argument('--local_bs', default=256, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
@@ -21,11 +21,11 @@ parser.add_argument('--dataset', default='mnist', type=str)
 parser.add_argument('--bs', default=256, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
-parser.add_argument('--tnt_upload', action='store_true', help='uploading tnt weights')
+parser.add_argument('--tnt_upload', action='store_false', help='uploading tnt weights')
 parser.add_argument('--weight_decay', default=0.0001, type=float)
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--seed', default=80, type=int)
-parser.add_argument('--model', default='vgg_norm', type=str)
+parser.add_argument('--model', default='vgg_tnt', type=str)
 parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
 args = parser.parse_args()
@@ -71,6 +71,7 @@ config = {
 
     # FL client
     'client_num': args.num_users,
+    'reset_index': True,
     'n_class': args.n_class,
     'client_frac': args.frac,
     'tnt_upload': args.tnt_upload,
