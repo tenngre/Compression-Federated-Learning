@@ -8,7 +8,7 @@ import torch
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
-parser.add_argument('--num_users', default=10, type=int, )
+parser.add_argument('--num_users', default=2, type=int, )
 parser.add_argument('--epochs', default=100, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
 parser.add_argument('--local_bs', default=256, type=int)

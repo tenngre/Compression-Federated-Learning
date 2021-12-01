@@ -184,21 +184,25 @@ def prepare_dataset(config):
 
 
 def clients_group(config, model):
-    if config['reset_index']:
-        print('Generating client index')
+
+    if os.path.exists('./client_index/client_index.txt'):
+        if len(torch.load('./client_index/client_index.txt')) == config['client_num']:
+            users_index = torch.load('./client_index/client_index.txt')
+        else:
+            print('[INFO] Existed client number not equal to input client number')
+            time.sleep(2)
+            print('[INFO] Generating NEW client index!!!')
+            os.makedirs(f'./client_index', exist_ok=True)
+            m = max(int(config['client_frac'] * config['client_num']), 1)
+            users_index = np.random.choice(range(config['client_num']), m, replace=False)
+            torch.save(users_index, f'./client_index/client_index.txt')
+    else:
+        print('[INFO] Client index DO NOT EXIST!!')
+        print('[INFO] Generating client index')
         os.makedirs(f'./client_index', exist_ok=True)
         m = max(int(config['client_frac'] * config['client_num']), 1)
         users_index = np.random.choice(range(config['client_num']), m, replace=False)
         torch.save(users_index, f'./client_index/client_index.txt')
-
-    else:
-        print('Loading client index')
-        users_index = torch.load('./client_index/client_index.txt')
-
-    if len(users_index) != config['client_num']:
-        raise Exception('Client numbers are not equal to index numbers, reset the client index')
-
-    print(users_index)
 
     train_dataset, test_dataset = prepare_dataset(config)
 
