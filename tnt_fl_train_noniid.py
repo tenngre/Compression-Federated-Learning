@@ -1,26 +1,24 @@
 import configs
-from scripts.tools_noniid import *
-import json
 import os
 import argparse
 import random
 import numpy as np
 from scripts import training
+import torch
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
-parser.add_argument('--his', default='testing', type=str)
-parser.add_argument('--num_users', default=10, type=int, )
+parser.add_argument('--num_users', default=1, type=int, )
 parser.add_argument('--epochs', default=100, help='epoch', type=int)
 parser.add_argument('--frac', default=1, type=int)
-parser.add_argument('--local_bs', default=128, type=int)
+parser.add_argument('--local_bs', default=256, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--split', default='user')
 parser.add_argument('--local_ep', default=1, type=int)
-parser.add_argument('--dataset', default='cifar10', type=str)
-parser.add_argument('--bs', default=128, type=int)
+parser.add_argument('--dataset', default='mnist', type=str)
+parser.add_argument('--bs', default=256, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
 parser.add_argument('--tnt_upload', action='store_false', help='uploading tnt weights')
@@ -34,38 +32,8 @@ args = parser.parse_args()
 
 args_dict = vars(args)
 
-os.makedirs('./setting', exist_ok=True)
-with open('./setting/config_{}.json'.format(args.his), 'w+') as f:
-    json.dump(args_dict, f)
-
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-# Data
-# print('==> Preparing data..')
-# transform_train = transforms.Compose([
-#     transforms.RandomHorizontalFlip(),
-#     transforms.RandomCrop(32, padding=4),
-#     transforms.ToTensor(),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-#
-# transform_test = transforms.Compose([
-#     transforms.ToTensor(),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
-#
-# dataset_train = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
-#                                              train=True, download=True,
-#                                              transform=transform_train)
-#
-# dataset_test = torchvision.datasets.CIFAR10(root='./data/datasets/cifar10',
-#                                             train=False, download=True,
-#                                             transform=transform_test)
-
-
-# dict_users_train, dict_users_test = cifar_extr_noniid(dataset_train,
-#                                                       dataset_test,
-#                                                       args.num_users,
-#                                                       args.n_class)
 
 def random_seed(seed):
     random.seed(seed)
@@ -83,9 +51,9 @@ config = {
     # dataset
     'dataset': args.dataset,
     'dataset_kwargs': {
-        'resize': 256 if args.dataset in ['nuswide'] else 224,
-        'crop': 224,
-        'norm': 2,
+        'resize': 256 if args.dataset in ['nuswide'] else 0,
+        'crop': 0,
+        'norm': 3,  # for mnist only
         'evaluation_protocol': 2,  # only affect cifar10
         'reset': True,
         'separate_multiclass': False,
@@ -93,22 +61,31 @@ config = {
 
     # FL global items
     'epochs': args.epochs,
-    'bs': args.bs,
+    'save_interval': 20,
+    'eval_interval': 1,
+    'bs': args.bs,  # for testing
     'train_set': 0,
     'test_set': 0,
     'current_lr': args.lr,
     'seed': args.seed,
 
     # FL client
-    'client_train_data': 0,
-    'client_test_data': 0,
     'client_num': args.num_users,
+    'reset_index': True,
     'n_class': args.n_class,
     'client_frac': args.frac,
     'tnt_upload': args.tnt_upload,
     'local_bs': args.local_bs,
     'local_ep': args.local_ep,
     'd_epoch': args.d_epoch,
+
+    'weights_decay_inter': 30,
+    'scheduler': 'step',
+    'scheduler_kwargs': {
+        'step_size': int(args.epochs * 0.8),
+        'gamma': 0.1,
+        'milestones': '0.5,0.75'
+    },
 
     'optima': 'adam',
     'optima_kwargs': {
@@ -118,21 +95,13 @@ config = {
         'nesterov': False,
         'betas': (0.9, 0.999)
     },
-    'scheduler': 'step',
-    'scheduler_kwargs': {
-        'step_size': int(args.epochs * 0.8),
-        'gamma': 0.1,
-        'milestones': '0.5,0.75'
-    },
     'model_name': args.model,
     'arch_kwargs': {
         'nclass': 0,  # will be updated below
         # 'pretrained': True,
         # 'freeze_weight': False,
     },
-
     'log_dir': 'results',
-    'history': args.his,
     'save': args.save,
     'tag': 'TNT'
 }
@@ -166,7 +135,9 @@ logdir = orig_logdir + f'{count:03d}'
 
 if __name__ == '__main__':
     random_seed(config['seed'])
-    if args.tnt_upload:
+    if config['tnt_upload']:
+        print('YES')
         training.main_tnt_upload(config)
     else:
+        print('NO')
         training.main_norm_upload(config)

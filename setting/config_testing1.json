@@ -1,1 +1,0 @@
-{"lr": 0.01, "his": "testing1", "num_users": 10, "epochs": 100, "frac": 1, "local_bs": 128, "save": false, "GPU": 0, "momentum": 0.9, "split": "user", "local_ep": 1, "bs": 128, "d_epoch": 50, "decay_r": 0.1, "tntupload": false, "weight_decay": 0.0001, "resume": false, "model": "vgg_tnt", "n_class": 2, "g_c": 200}

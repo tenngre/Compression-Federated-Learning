@@ -85,7 +85,7 @@ def store_weights(model):
     return model_dict
 
 
-def WeightsUpdate(global_new, global_old, omiga):
+def weights_update(global_new, global_old, omiga):
     old_weights = store_weights(global_old)
     new_weights = store_weights(global_new)
 
