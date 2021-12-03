@@ -165,6 +165,7 @@ class Aggregator(object):
             for i in range(1, len(w)):
                 w_avg[k] += w[i][k]
             w_avg[k] = torch.div(w_avg[k], float(len(w)))
+            # w_avg[k] = torch.nn.functional.normalize(torch.div(w_avg[k], float(len(w))), dim=0)
 
         return w_avg
 
@@ -244,9 +245,11 @@ def main_tnt_upload(config):
     round_time = []
 
     train_history = []
-    test_history = {}
+    test_history = []
 
     compression_rate = {}
+
+    glob_norm = {}
 
     nepochs = config['epochs']
     neval = config['eval_interval']
@@ -291,6 +294,14 @@ def main_tnt_upload(config):
         # aggregation in server
         glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))
 
+        glob_norm[epoch] = {'Round': epoch + 1}
+
+        for key in glob_avg.keys():
+            norm_ = torch.norm(glob_avg[key])
+            glob_norm[epoch][key] = norm_.item()
+
+        json.dump(glob_norm, open(f'{logdir}/glob_norm.json', 'w+'), indent=True, sort_keys=True)
+
         # update local models
         for idx in client_group.keys():
             client_group[idx].model = rec_w(copy.deepcopy(glob_avg),
@@ -302,17 +313,19 @@ def main_tnt_upload(config):
         if eval_now:
             client_round_acc = []
             client_round_loss = []
+            test_history_local = {'Round': epoch + 1}
             logging.info(f'\n |Round {epoch} Client Test |\n')
             for idx in client_group.keys():
                 logging.info(f'Client {idx} Testing on GPU {config["device"]}.')
                 testing_res = test(model=client_group[idx].model,
                                    config=config)
-                test_history['client_' + str(idx)] = {}
-                test_history['client_' + str(idx)]['test_acc'] = testing_res['testing_acc'].avg
-                test_history['client_' + str(idx)]['test_lose'] = testing_res['testing_loss_total'].avg
+                test_history_local[f'client_{idx}'] = {}
+                test_history_local[f'client_{idx}']['test_acc'] = testing_res['testing_acc'].avg
+                test_history_local[f'client_{idx}']['test_lose'] = testing_res['testing_loss_total'].avg
 
                 client_round_acc.append(testing_res['testing_acc'].avg)
                 client_round_loss.append(testing_res['testing_loss_total'].avg)
+            test_history.append(test_history_local)
 
             curr_metric = average(client_round_acc)
             round_test[f'{epoch}_Round_test_acc'] = average(client_round_acc)
@@ -337,7 +350,7 @@ def main_tnt_upload(config):
         # io.fast_save(optimsd, f'{logdir}/optims/last.pth')
         save_now = config['save_interval'] != 0 and (epoch + 1) % config['save_interval'] == 0
         if save_now:
-            io.fast_save(modelsd, f'{logdir}/models/ep{epoch + 1}.pth')
+            torch.save(modelsd, f'{logdir}/models/ep{epoch + 1}.pth')
             # io.fast_save(optimsd, f'{logdir}/optims/ep{ep + 1}.pth')
             # io.fast_save(train_outputs, f'{logdir}/outputs/train_ep{ep + 1}.pth')
 

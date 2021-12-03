@@ -188,7 +188,7 @@ def kernels_cluster(weights_f, channel=False):
             permute_weights = weights_f.reshape(o* h_ks* w_ks, i)
         else:
             o, i, h_ks, w_ks = weights_f.size()
-            permute_weights = weights_f.reshape(32, -1)  # (o, i, h, w) ==> (o, h, w, i)
+            permute_weights = weights_f.reshape(1, -1)  # (o, i, h, w) ==> (o, h, w, i)
             
             # (0, h, w, i) ==> (o, i, h, w)
 #                 permute_weights = permute_weights.reshape(o * h_ks * w_ks, i)  # (o, h, w, I) ==> (o * h * w, i)
