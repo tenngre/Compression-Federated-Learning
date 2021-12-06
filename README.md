@@ -2,6 +2,7 @@
 
 This git is a compression Federated Learning (FL) training framework. 
 The compression method is following the paper "Neural Networks Weights Quantization: Target None-retraining Ternary (TNT)".
+https://www.semanticscholar.org/paper/Neural-Networks-Weights-Quantization%3A-Target-(TNT)-Zhang-Zhu/8c826bc32fbc1f90d9e29649b61cf949241b588a
 
 # RUN
 
