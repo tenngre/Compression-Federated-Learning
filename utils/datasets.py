@@ -3,7 +3,6 @@ import os
 import numpy as np
 import torch
 import math
-from torch.utils.data import Dataset
 from torchvision.datasets import CIFAR10, CIFAR100, MNIST
 from torchvision.datasets.folder import pil_loader
 

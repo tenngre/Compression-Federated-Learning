@@ -1,5 +1,7 @@
 # coding=utf-8
 import torch
+
+
 def normalize_row(target_vector):
     """
     convert each filter in a kernel to a unit vector
@@ -68,13 +70,13 @@ def order_vec(kernel_flatten, target_hat_sorted_index, maxIndex_conv):
     """
 
     index_tune = torch.clamp(maxIndex_conv, min=0, max=kernel_flatten.size(1))
-    
+
     x_sorted = torch.gather(kernel_flatten, -1, target_hat_sorted_index)  # (N, F)
     x_abs_max = torch.gather(x_sorted, -1, index_tune).abs()  # (N, 1)
     ternary_vector = torch.sign(kernel_flatten)
     mask = torch.abs(kernel_flatten) < x_abs_max
     ternary_vector[mask] = 0
-        
+
     return ternary_vector
 
 
@@ -101,20 +103,20 @@ def TNT_convert(weights_f):
 
 # scaling
 def scaling1(kernel_flatten, ternary_vector):
-    
     floating_norm = torch.norm(kernel_flatten, p=2, dim=-1, keepdim=True)
     ternary_norm = torch.norm(ternary_vector, p=2, dim=-1, keepdim=True)
     scale_num = floating_norm / (ternary_norm + 1e-6)
     weights_t = scale_num * ternary_vector
-    
+
     t_norm = torch.norm(weights_t, p=2, dim=-1, keepdim=True)
-#     tt = (t_norm == floating_norm)
-#     print('jklsjkljklfnl',tt[:10])
-#     print('kkkkkk', t_norm[:10])
-#     print('lllllll', floating_norm[:10])
-#     stop()
-    
+    #     tt = (t_norm == floating_norm)
+    #     print('jklsjkljklfnl',tt[:10])
+    #     print('kkkkkk', t_norm[:10])
+    #     print('lllllll', floating_norm[:10])
+    #     stop()
+
     return weights_t
+
 
 def scaling(kernel_flatten, ternary_vector):
     """
@@ -181,23 +183,23 @@ def kernels_cluster(weights_f, channel=False):
         permute_weights = weights_f.reshape(1, -1)
     elif t_dim == 4:  # convolution or FC
         o, i, h_ks, w_ks = weights_f.size()
-#         permute_weights = weights_f.reshape(16, -1)
+        #         permute_weights = weights_f.reshape(16, -1)
         if channel:  # channel fiber
             permute_weights = weights_f.permute(0, 2, 3, 1)  # (o, i, h, w) ==> (o, h, w, i)
             o, h_ks, w_ks, i = permute_weights.size()
-            permute_weights = weights_f.reshape(o* h_ks* w_ks, i)
+            permute_weights = weights_f.reshape(o * h_ks * w_ks, i)
         else:
             o, i, h_ks, w_ks = weights_f.size()
             permute_weights = weights_f.reshape(1, -1)  # (o, i, h, w) ==> (o, h, w, i)
-            
+
             # (0, h, w, i) ==> (o, i, h, w)
-#                 permute_weights = permute_weights.reshape(o * h_ks * w_ks, i)  # (o, h, w, I) ==> (o * h * w, i)
-#             permute_weights = weights_f.reshape(o * i, h_ks * w_ks)  # (o, i, h, w) ==> (o * i, h * w)
+    #                 permute_weights = permute_weights.reshape(o * h_ks * w_ks, i)  # (o, h, w, I) ==> (o * h * w, i)
+    #             permute_weights = weights_f.reshape(o * i, h_ks * w_ks)  # (o, i, h, w) ==> (o * i, h * w)
     else:
         permute_weights = weights_f
-        
+
     ternary_weights, cosine_similarity = TNT_convert(permute_weights)  # output the best ternary tensor and its cosine
-                                                                       # similarity with floating type
+    # similarity with floating type
     weights_t = scaling1(permute_weights, ternary_weights)
 
     if t_dim == 1:
@@ -205,7 +207,7 @@ def kernels_cluster(weights_f, channel=False):
     elif t_dim == 4:
         if channel:
             weights_t = weights_t.reshape(o, h_ks, w_ks, i)
-            weights_t = weights_t.permute(0, 3, 1, 2) # (0, h, w, i) ==> (o, i, h, w)
+            weights_t = weights_t.permute(0, 3, 1, 2)  # (0, h, w, i) ==> (o, i, h, w)
         else:
             weights_t = weights_t.reshape(o, i, h_ks, w_ks)
     return weights_t

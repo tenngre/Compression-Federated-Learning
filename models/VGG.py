@@ -11,29 +11,31 @@ class VGG_tnt(nn.Module):
         super(VGG_tnt, self).__init__()
         
         self.feature_extractor = nn.Sequential(
-            TNTConv2d(in_channels=1, out_channels=128, kernel_size=3, stride=1),
-            TNTBatchNorm2d(128),
+            TNTConv2d(in_channels=3
+                      , out_channels=128, kernel_size=3, stride=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             
             TNTConv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1),
-            TNTBatchNorm2d(128),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2),
             
             TNTConv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1),
-            TNTBatchNorm2d(256),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             
             TNTConv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1),
-            TNTBatchNorm2d(256),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2),
         )
 
         self.classifier = nn.Sequential(
-            TNTLinear(in_features=4096, out_features=1024),
+            TNTLinear(in_features=6400, out_features=1024),
+            nn.BatchNorm1d(num_features=1024),
             nn.ReLU(),
-            TNTLinear(in_features=1024, out_features=nclass),
+            nn.Linear(in_features=1024, out_features=nclass),
         )
         
     def get_tnt(self):

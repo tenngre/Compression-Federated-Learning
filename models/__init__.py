@@ -14,6 +14,7 @@ def register_network(name):
 
 # from .resnettnt import *
 from .VGG import *
+from .Alex import *
 # from .mobilenetv2 import *
 # from .mobilenetv2_tnt import *
 # from .resnet import *

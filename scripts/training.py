@@ -84,7 +84,7 @@ class Client(object):
 
         for item in client_batch:
             for key in item.keys():
-                client_meters[f'Round_{r}_' + str(self.client_idx) + '_' + key].update(item[key])
+                client_meters[f'Round_{r}_{self.client_idx}_{key}'].update(item[key])
         for key in client_meters:
             client_ep[key] = client_meters[key].avg
 
@@ -263,18 +263,18 @@ def main_tnt_upload(config):
         client_local = {}
         train_acc_total = []
         train_loss_total = []
-        local_zero_rates = []
+        # local_zero_rates = []
 
         print(f'\n | Global Training Round: {epoch}|\n')
 
         # training
         for idx in client_group.keys():
             ter_params, qua_error, client_ep = client_group[idx].train(config, epoch)
-            client_local[idx] = copy.deepcopy(ter_params)
-            client_upload[idx] = copy.deepcopy(qua_error)
+            client_local[idx] = copy.deepcopy(qua_error)
+            client_upload[idx] = copy.deepcopy(ter_params)
             z_r = zero_rates(ter_params)
-            local_zero_rates.append(z_r)
-            logging.info(f'Client {idx} zero rate {z_r:.2%}')
+            # local_zero_rates.append(z_r)
+            # logging.info(f'Client {idx} zero rate {z_r:.2%}')
             compression_rate[f'Round_{epoch}_Client_{idx}_compression_rate'] = z_r
 
             # recording local training info
@@ -294,11 +294,10 @@ def main_tnt_upload(config):
         # aggregation in server
         glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))
 
-        glob_norm[epoch] = {'Round': epoch + 1}
-
+        glob_norm[f'Round_{epoch}'] = {}
         for key in glob_avg.keys():
             norm_ = torch.norm(glob_avg[key])
-            glob_norm[epoch][key] = norm_.item()
+            glob_norm[f'Round_{epoch}'][key] = norm_.item()
 
         json.dump(glob_norm, open(f'{logdir}/glob_norm.json', 'w+'), indent=True, sort_keys=True)
 
@@ -381,7 +380,7 @@ def main_norm_upload(config):
     json.dump(config, open(f'{logdir}/config.json', 'w+'), indent=4, sort_keys=True)
 
     aggregator = Aggregator(config)
-    print('==> Building model..')
+    print('Building model..')
     inited_model = aggregator.inited_model()
     print(inited_model)
 
@@ -393,6 +392,8 @@ def main_norm_upload(config):
     round_time = []
     train_history = []
     test_history = []
+
+    compression_rate = {}
 
     nepochs = config['epochs']
     neval = config['eval_interval']
@@ -412,18 +413,21 @@ def main_norm_upload(config):
         for idx in client_group.keys():
             w_, client_ep = client_group[idx].train(config, epoch)
             client_upload[idx] = copy.deepcopy(w_)
+            z_r = zero_rates(w_)
+            compression_rate[f'Round_{epoch}_Client_{idx}_compression_rate'] = z_r
 
             train_history.append(client_ep)
 
             # recording local training info
-            train_acc_total.append(client_ep[str(idx) + '_train_acc'])
-            train_loss_total.append(client_ep[str(idx) + '_train_loss_total'])
+            train_acc_total.append(client_ep[f'Round_{epoch}_{idx}_train_acc'])
+            train_loss_total.append(client_ep[f'Round_{epoch}_{idx}_train_loss_total'])
 
         round_train[f'{epoch}_Round_train_acc'] = average(train_acc_total)
         round_train[f'{epoch}_Round_train_loss'] = average(train_loss_total)
 
         json.dump(train_history, open(f'{logdir}/train_history.json', 'w+'), indent=True, sort_keys=True)
         json.dump(round_train, open(f'{logdir}/train_round_history.json', 'w+'), indent=True, sort_keys=True)
+        json.dump(compression_rate, open(f'{logdir}/client_compression_rate.json', 'w+'), indent=True, sort_keys=True)
 
         # aggregation in server
         glob_avg = aggregator.params_aggregation(copy.deepcopy(client_upload))
@@ -470,7 +474,7 @@ def main_norm_upload(config):
         # io.fast_save(optimsd, f'{logdir}/optims/last.pth')
         save_now = config['save_interval'] != 0 and (epoch + 1) % config['save_interval'] == 0
         if save_now:
-            io.fast_save(modelsd, f'{logdir}/models/ep{epoch + 1}.pth')
+            torch.save(modelsd, f'{logdir}/models/ep{epoch + 1}.pth')
             # io.fast_save(optimsd, f'{logdir}/optims/ep{ep + 1}.pth')
             # io.fast_save(train_outputs, f'{logdir}/outputs/train_ep{ep + 1}.pth')
 

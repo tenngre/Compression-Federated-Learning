@@ -17,15 +17,15 @@ parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
 parser.add_argument('--split', default='user')
 parser.add_argument('--local_ep', default=1, type=int)
-parser.add_argument('--dataset', default='mnist', type=str)
+parser.add_argument('--dataset', default='cifar10', type=str)
 parser.add_argument('--bs', default=256, type=int)
 parser.add_argument('--d_epoch', default=50, type=int)
 parser.add_argument('--decay_r', default=0.1, type=float)
-parser.add_argument('--tnt_upload', action='store_false', help='uploading tnt weights')
+parser.add_argument('--tnt_upload', action='store_true', help='uploading tnt weights')
 parser.add_argument('--weight_decay', default=0.0001, type=float)
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--seed', default=80, type=int)
-parser.add_argument('--model', default='vgg_tnt', type=str)
+parser.add_argument('--model', default='alex_tnt', type=str)
 parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
 parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
 args = parser.parse_args()
@@ -53,7 +53,7 @@ config = {
     'dataset_kwargs': {
         'resize': 256 if args.dataset in ['nuswide'] else 0,
         'crop': 0,
-        'norm': 3,  # for mnist only
+        'norm': 2,  # 3 for mnist only; 2 for cifar10
         'evaluation_protocol': 2,  # only affect cifar10
         'reset': True,
         'separate_multiclass': False,
@@ -80,14 +80,14 @@ config = {
     'd_epoch': args.d_epoch,
 
     'weights_decay_inter': 30,
-    'scheduler': 'step',
+    'scheduler': 'cos',  # step, mstep, cos
     'scheduler_kwargs': {
         'step_size': int(args.epochs * 0.8),
         'gamma': 0.1,
         'milestones': '0.5,0.75'
     },
 
-    'optima': 'adam',
+    'optima': 'sgd',  # sgd, adam
     'optima_kwargs': {
         'lr': args.lr,
         'momentum': 0.9,
@@ -95,6 +95,7 @@ config = {
         'nesterov': False,
         'betas': (0.9, 0.999)
     },
+
     'model_name': args.model,
     'arch_kwargs': {
         'nclass': 0,  # will be updated below
@@ -103,7 +104,7 @@ config = {
     },
     'log_dir': 'results',
     'save': args.save,
-    'tag': 'TNT'
+    'tag': 'TNT' if args.tnt_upload else 'Norm'
 }
 
 config['arch_kwargs']['nclass'] = configs.nclass(config)
@@ -111,7 +112,7 @@ config['arch_kwargs']['nclass'] = configs.nclass(config)
 
 logdir = (f'./{config["model_name"]}{config["arch_kwargs"]["nclass"]}_'
           f'{config["dataset"]}_{config["dataset_kwargs"]["evaluation_protocol"]}_'
-          f'{config["epochs"]}_')
+          f'{config["epochs"]}')
 
 if config['tag'] != '':
     logdir += f'/{config["tag"]}_{config["seed"]}_'

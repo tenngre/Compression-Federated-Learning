@@ -57,6 +57,9 @@ def scheduler(config, optimizer):
         return lr_scheduler.StepLR(optimizer,
                                    kwargs['step_size'],
                                    kwargs['gamma'])
+    elif s_type == 'cos':
+        return lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+
     elif s_type == 'mstep':
         return lr_scheduler.MultiStepLR(optimizer,
                                         [int(float(m) * int(config['epochs'])) for m in
@@ -103,7 +106,7 @@ def compose_transform(mode='train', resize=0, crop=0, norm=0,
     mean, std = {
         0: [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]],
         1: [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],
-        2: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]],
+        2: [[0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]],
         3: [[0.1307], [0.3081]]
     }[norm]
 
@@ -191,6 +194,7 @@ def dataset(config, filename, transform_mode):
 
         if transform_mode == 'train':
             transform = compose_transform('train', resizec, 0, norm, [
+                transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),
                 transforms.ColorJitter(brightness=0.05, contrast=0.05),
             ])
