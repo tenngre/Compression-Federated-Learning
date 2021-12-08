@@ -5,7 +5,6 @@ from collections import defaultdict
 from datetime import datetime
 
 import torch
-import os
 from .tools_noniid import ternary_convert, rec_w, zero_rates
 import logging
 import torch.nn as nn
@@ -14,7 +13,6 @@ from utils.misc import AverageMeter, Timer
 from pprint import pprint
 from configs import *
 import configs
-from utils import io
 
 
 class Client(object):

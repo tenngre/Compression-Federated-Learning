@@ -1,5 +1,4 @@
 from ternay.convert_tnt import *
-import copy
 from models import register_network
 
 
