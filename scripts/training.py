@@ -268,8 +268,12 @@ def main_tnt_upload(config):
         # training
         for idx in client_group.keys():
             ter_params, qua_error, client_ep = client_group[idx].train(config, epoch)
-            client_local[idx] = copy.deepcopy(qua_error)
-            client_upload[idx] = copy.deepcopy(ter_params)
+            if config['which_param_upload'] == 'ternary_param':
+                client_local[idx] = copy.deepcopy(qua_error)
+                client_upload[idx] = copy.deepcopy(ter_params)
+            else:
+                client_local[idx] = copy.deepcopy(ter_params)
+                client_upload[idx] = copy.deepcopy(qua_error)
             z_r = zero_rates(ter_params)
             # local_zero_rates.append(z_r)
             # logging.info(f'Client {idx} zero rate {z_r:.2%}')
@@ -310,6 +314,10 @@ def main_tnt_upload(config):
         if eval_now:
             client_round_acc = []
             client_round_loss = []
+
+            best_test_acc = 0
+            best_test_model = 0
+
             test_history_local = {'Round': epoch + 1}
             logging.info(f'\n |Round {epoch} Client Test |\n')
             for idx in client_group.keys():
@@ -322,10 +330,18 @@ def main_tnt_upload(config):
 
                 client_round_acc.append(testing_res['testing_acc'].avg)
                 client_round_loss.append(testing_res['testing_loss_total'].avg)
-            test_history.append(test_history_local)
 
+                if testing_res['testing_acc'].avg >= best_test_acc:
+                    best_test_acc = testing_res['testing_acc'].avg
+                    best_test_model = copy.deepcopy(client_group[idx].model.state_dict())
+
+            for idx in client_group.keys():
+                client_group[idx].model.load_state_dict(best_test_model)
+
+            test_history.append(test_history_local)
             curr_metric = average(client_round_acc)
-            round_test[f'{epoch}_Round_test_acc'] = average(client_round_acc)
+            # round_test[f'{epoch}_Round_test_acc'] = average(client_round_acc)
+            round_test[f'{epoch}_Round_test_acc'] = best_test_acc
             round_test[f'{epoch}_Round_test_lose'] = average(client_round_loss)
 
             if len(test_history) != 0:
@@ -334,6 +350,7 @@ def main_tnt_upload(config):
 
             elapsed = time.time() - start_time
             round_time.append(elapsed)
+            print(f'Acc for every client {client_round_acc}')
 
             print(f'Round {epoch} costs time: {elapsed:.2f}s|'
                   f'Train Acc.: {round_train[f"{epoch}_Round_train_acc"]:.2%}| '
