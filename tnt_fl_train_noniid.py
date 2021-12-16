@@ -12,24 +12,18 @@ parser.add_argument('--num_users', default=10, type=int, )
 parser.add_argument('--frac', default=1, type=int)
 
 parser.add_argument('--epochs', default=100, help='epoch', type=int)
-parser.add_argument('--local_ep', default=10, type=int)
-parser.add_argument('--local_bs', default=10, type=int)
+parser.add_argument('--local_ep', default=1, type=int)
+parser.add_argument('--local_bs', default=12, type=int)
 parser.add_argument('--save', action='store_true', help='save model every 10 epoch')
 parser.add_argument('--GPU', default=0, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
-# parser.add_argument('--split', default='user')
 parser.add_argument('--dataset', default='cifar10', type=str)
 parser.add_argument('--upload_param', default='ternary_param', type=str)
-parser.add_argument('--bs', default=256, type=int)
-# parser.add_argument('--d_epoch', default=50, type=int)
-# parser.add_argument('--decay_r', default=0.1, type=float)
+parser.add_argument('--testing_bs', default=256, type=int)
 parser.add_argument('--tnt_upload', action='store_true', help='uploading tnt weights')
-# parser.add_argument('--weight_decay', default=0.0001, type=float)
-# parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--seed', default=80, type=int)
 parser.add_argument('--model', default='alex_norm', type=str)
-parser.add_argument('--n_class', default=2, type=int, help='class number in each client')
-# parser.add_argument('--g_c', default=200, type=int, help='floating model communication epoch')
+
 args = parser.parse_args()
 
 args_dict = vars(args)
@@ -45,7 +39,6 @@ def random_seed(seed):
 
 
 config = {
-    # 'current_lr': args.lr,
     'acc_rate': 0.5,
     'best_acc': 0,
     'glob_agg_num': 0,
@@ -65,7 +58,7 @@ config = {
     'epochs': args.epochs,
     'save_interval': 20,
     'eval_interval': 1,
-    'bs': args.bs,  # for testing
+    'testing_bs': args.testing_bs,  # for testing only
     'train_set': 0,
     'test_set': 0,
     'seed': args.seed,
@@ -73,11 +66,9 @@ config = {
     # FL client
     'client_num': args.num_users,
     'reset_index': True,
-    'n_class': args.n_class,
     'client_frac': args.frac,
     'local_bs': args.local_bs,
     'local_ep': args.local_ep,
-    # 'd_epoch': args.d_epoch,
     'tnt_upload': args.tnt_upload,
     'which_param_upload': args.upload_param,
 
